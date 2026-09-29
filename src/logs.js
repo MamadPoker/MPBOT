@@ -47,6 +47,33 @@ function readAuditReason(reason) {
   return match ? { reason: match[1], moderatorId: match[2] } : { reason, moderatorId: null };
 }
 
+// ---- Who did it? (voice moves/disconnects, message deletes) ----
+
+// Audit log entry id -> how many of its actions we've already matched to an event
+const auditMatched = new Map();
+
+// Discord groups repeated actions into one audit log entry with a count (and for voice moves it doesn't
+// even say who the target was). So: wait a moment, then look for a matching entry that is new or whose
+// count went up. Returns the executor's user id, or null if there's none (= the member did it themselves).
+// ponytail: if a mod and a member do the same thing at the same moment, the two can be swapped. Rare;
+// exact tracking isn't possible with what Discord provides.
+async function findAuditExecutor(guild, type, { channelId, targetId } = {}) {
+  await new Promise((resolve) => setTimeout(resolve, 1500)); // give Discord time to write the audit log
+  const { entries } = await guild.fetchAuditLogs({ type, limit: 10 });
+  for (const entry of entries.values()) {
+    if (channelId && entry.extra?.channel?.id !== channelId) continue;
+    if (targetId && entry.targetId !== targetId) continue;
+    const count = entry.extra?.count ?? 1;
+    // First time we see this entry: brand new = nothing matched yet; older = from before the bot started
+    if (!auditMatched.has(entry.id)) auditMatched.set(entry.id, Date.now() - entry.createdTimestamp < 15_000 ? 0 : count);
+    if (count > auditMatched.get(entry.id)) {
+      auditMatched.set(entry.id, auditMatched.get(entry.id) + 1);
+      return entry.executorId;
+    }
+  }
+  return null;
+}
+
 // ---- Turning audit log changes into readable text ----
 
 const permNames = (bits) => new PermissionsBitField(BigInt(bits ?? 0)).toArray();
@@ -101,5 +128,5 @@ function describeOverwrite(changes) {
 
 module.exports = {
   LOG_TYPES, simplifyName, field, logEmbed, userText, timeText, sendLog,
-  auditReason, readAuditReason, describeChanges, describeOverwrite,
+  auditReason, readAuditReason, findAuditExecutor, describeChanges, describeOverwrite,
 };

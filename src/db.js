@@ -16,6 +16,12 @@ db.exec(`
     guild_id TEXT NOT NULL, user_id TEXT NOT NULL, xp INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (guild_id, user_id)
   );
+  -- Recent messages, so edit/delete logs still know them after a restart (kept 7 days)
+  CREATE TABLE IF NOT EXISTS messages (
+    id TEXT PRIMARY KEY, guild_id TEXT NOT NULL, channel_id TEXT NOT NULL,
+    author_id TEXT NOT NULL, author_name TEXT NOT NULL, content TEXT, attachments TEXT, created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS messages_created_at ON messages (created_at);
 `);
 
 function getSetting(guildId, key) {

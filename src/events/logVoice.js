@@ -1,6 +1,6 @@
 const { Events, AuditLogEvent } = require('discord.js');
 const { getSetting } = require('../db');
-const { field, logEmbed, userText, sendLog } = require('../logs');
+const { field, logEmbed, userText, sendLog, findAuditExecutor } = require('../logs');
 
 const TOGGLES = [
   ['serverMute', 'Server muted', 'Server unmuted'],
@@ -9,34 +9,11 @@ const TOGGLES = [
   ['selfDeaf', 'Deafened', 'Undeafened'],
 ];
 
-// Audit log entry id -> how many of its moves/disconnects we've already matched to a member
-const matched = new Map();
-
-// Was this move/disconnect done by a moderator? Discord's audit log doesn't say WHO was moved, and groups
-// repeats into one entry with a count. So: wait a moment, then look for an entry that's new or whose count went up.
-// No match = the member did it themselves. Returns the moderator's user id, or null.
-// ponytail: if a mod moves someone at the same moment another member moves themselves into the same channel,
-// the two can be swapped. Rare; exact tracking isn't possible with what Discord provides.
-async function findModerator(guild, type, channelId) {
-  await new Promise((resolve) => setTimeout(resolve, 1500)); // give Discord time to write the audit log
-  const { entries } = await guild.fetchAuditLogs({ type, limit: 10 });
-  for (const entry of entries.values()) {
-    if (channelId && entry.extra?.channel?.id !== channelId) continue; // moves: must be into the same channel
-    const count = entry.extra?.count ?? 1;
-    // First time we see this entry: brand new = nothing matched yet; older = from before the bot started
-    if (!matched.has(entry.id)) matched.set(entry.id, Date.now() - entry.createdTimestamp < 15_000 ? 0 : count);
-    if (count > matched.get(entry.id)) {
-      matched.set(entry.id, matched.get(entry.id) + 1);
-      return entry.executorId;
-    }
-  }
-  return null;
-}
-
+// Was this move/disconnect done by a moderator? No match in the audit log = the member did it themselves.
 // Only asks the audit log if that log channel is set up (saves requests on busy servers)
 async function modLogVoice(guild, logType, auditType, channelId, makeEmbed) {
   if (!getSetting(guild.id, `log:${logType}`)) return;
-  const modId = await findModerator(guild, auditType, channelId).catch((err) => {
+  const modId = await findAuditExecutor(guild, auditType, { channelId }).catch((err) => {
     console.error(`Could not read the audit log in ${guild.name}:`, err.message);
     return null;
   });
