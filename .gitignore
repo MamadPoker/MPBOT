@@ -141,3 +141,6 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Bot database (per-server settings)
+data.db*
