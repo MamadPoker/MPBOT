@@ -18,7 +18,9 @@
   },
   "homepage": "https://github.com/MamadPoker/MPBOT#readme",
   "dependencies": {
-    "discord.js": "^14.27.0"
+    "@napi-rs/canvas": "^1.0.9",
+    "discord.js": "^14.27.0",
+    "vazirmatn": "^33.0.3"
   },
   "private": true
 }
