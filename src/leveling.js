@@ -1,4 +1,4 @@
-const { db } = require('./db');
+const { db, getSetting } = require('./db');
 
 // XP needed to go from `level` to the next one (same curve MEE6 uses: 100, 155, 220, ...)
 const xpToNext = (level) => 5 * level ** 2 + 50 * level + 100;
@@ -17,7 +17,11 @@ function levelInfo(totalXp) {
 const COOLDOWN = 60_000; // XP at most once a minute, so spamming doesn't help
 const lastGain = new Map(); // "server:user" -> time of last XP (forgotten on restart, that's fine)
 
+// Leveling is off unless an admin runs /level enable
+const levelingEnabled = (guildId) => Boolean(getSetting(guildId, 'leveling_enabled'));
+
 async function giveXp(message) {
+  if (!levelingEnabled(message.guild.id)) return;
   const key = `${message.guild.id}:${message.author.id}`;
   if (Date.now() - (lastGain.get(key) ?? 0) < COOLDOWN) return;
   lastGain.set(key, Date.now());
@@ -37,4 +41,4 @@ async function giveXp(message) {
   }
 }
 
-module.exports = { levelInfo, giveXp };
+module.exports = { levelInfo, levelingEnabled, giveXp };

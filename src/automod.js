@@ -32,9 +32,12 @@ async function findProblem(message) {
   return null;
 }
 
+// Auto-mod is off unless an admin runs /automod enable
+const automodEnabled = (guildId) => Boolean(getSetting(guildId, 'automod_enabled'));
+
 // Deletes the message if it breaks a rule. Returns true if it was removed.
 async function checkAutomod(message) {
-  if (!message.content) return false;
+  if (!automodEnabled(message.guild.id) || !message.content) return false;
   const member = message.member ?? (await message.guild.members.fetch(message.author.id).catch(() => null));
   if (member?.permissions.has(PermissionFlagsBits.ManageMessages)) return false; // mods are exempt
 
@@ -55,4 +58,4 @@ async function checkAutomod(message) {
   return true;
 }
 
-module.exports = { normalize, getWords, setWords, wordPattern, checkAutomod };
+module.exports = { normalize, getWords, setWords, wordPattern, automodEnabled, checkAutomod };

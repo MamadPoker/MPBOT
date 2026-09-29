@@ -1,6 +1,8 @@
-const { SlashCommandBuilder, EmbedBuilder, InteractionContextType } = require('discord.js');
-const { db } = require('../db');
-const { levelInfo } = require('../leveling');
+const { SlashCommandBuilder, EmbedBuilder, InteractionContextType, PermissionFlagsBits, MessageFlags } = require('discord.js');
+const { db, setSetting } = require('../db');
+const { levelInfo, levelingEnabled } = require('../leveling');
+
+const OFF_MESSAGE = { content: 'Leveling is turned off on this server. An admin can turn it on with `/level enable`.', flags: MessageFlags.Ephemeral };
 
 const progressBar = (xp, needed) => {
   const filled = Math.round((xp / needed) * 12);
@@ -15,6 +17,7 @@ module.exports = [
       .setContexts(InteractionContextType.Guild)
       .addUserOption((o) => o.setName('user').setDescription('Whose rank to show')),
     async execute(interaction) {
+      if (!levelingEnabled(interaction.guildId)) return interaction.reply(OFF_MESSAGE);
       const user = interaction.options.getUser('user') ?? interaction.user;
       const row = db.prepare('SELECT xp FROM levels WHERE guild_id = ? AND user_id = ?').get(interaction.guildId, user.id);
       if (!row) return interaction.reply({ content: `**${user.username}** has no XP yet. Chat to earn some!`, allowedMentions: { parse: [] } });
@@ -39,6 +42,7 @@ module.exports = [
       .setDescription('Top 10 most active members')
       .setContexts(InteractionContextType.Guild),
     async execute(interaction) {
+      if (!levelingEnabled(interaction.guildId)) return interaction.reply(OFF_MESSAGE);
       const rows = db.prepare('SELECT user_id, xp FROM levels WHERE guild_id = ? ORDER BY xp DESC LIMIT 10').all(interaction.guildId);
       if (!rows.length) return interaction.reply('Nobody has XP yet. Start chatting!');
       const medals = ['🥇', '🥈', '🥉'];
@@ -48,6 +52,23 @@ module.exports = [
         .setTitle(`🏆 ${interaction.guild.name} leaderboard`)
         .setDescription(lines.join('\n'));
       return interaction.reply({ embeds: [embed] }); // mentions inside embeds never ping
+    },
+  },
+  {
+    data: new SlashCommandBuilder()
+      .setName('level')
+      .setDescription('Turn the leveling/XP system on or off for this server')
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild) // admins only
+      .setContexts(InteractionContextType.Guild)
+      .addSubcommand((s) => s.setName('enable').setDescription('Members earn XP, level-up messages are sent'))
+      .addSubcommand((s) => s.setName('disable').setDescription('No XP and no level-up messages (existing XP is kept)')),
+    async execute(interaction) {
+      const enable = interaction.options.getSubcommand() === 'enable';
+      setSetting(interaction.guildId, 'leveling_enabled', enable ? '1' : null);
+      return interaction.reply({
+        content: enable ? '✅ Leveling is on. Members earn XP by chatting.' : '✅ Leveling is off. Existing XP is kept if you turn it back on.',
+        flags: MessageFlags.Ephemeral,
+      });
     },
   },
 ];
