@@ -11,9 +11,11 @@ module.exports = {
       await command.execute(interaction);
     } catch (err) {
       console.error(`Error in /${interaction.commandName}:`, err);
-      const reply = { content: '❌ Something went wrong running that command.', flags: MessageFlags.Ephemeral };
-      if (interaction.replied || interaction.deferred) await interaction.followUp(reply).catch(() => {});
-      else await interaction.reply(reply).catch(() => {});
+      const content = `❌ Something went wrong: ${err.message}`;
+      // Replace the "thinking..." message if there is one, otherwise answer normally
+      if (interaction.deferred && !interaction.replied) await interaction.editReply({ content }).catch(() => {});
+      else if (interaction.replied) await interaction.followUp({ content, flags: MessageFlags.Ephemeral }).catch(() => {});
+      else await interaction.reply({ content, flags: MessageFlags.Ephemeral }).catch(() => {});
     }
   },
 };

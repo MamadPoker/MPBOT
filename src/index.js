@@ -11,10 +11,17 @@ try {
 }
 
 const client = new Client({
-  // GuildMembers = join/leave events (needs "Server Members Intent" in the Developer Portal)
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
-  // Lets us see members leave even if the bot started after they joined
-  partials: [Partials.GuildMember],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers, // join/leave/member updates (needs "Server Members Intent" in the Developer Portal)
+    GatewayIntentBits.GuildModeration, // audit log entries, bans
+    GatewayIntentBits.GuildInvites, // invite tracking
+    GatewayIntentBits.GuildMessages, // message edit/delete logs
+    GatewayIntentBits.MessageContent, // message text (needs "Message Content Intent" in the Developer Portal)
+    GatewayIntentBits.GuildVoiceStates, // voice logs
+  ],
+  // Lets us see leaves/deletes/edits even for members and messages from before the bot started
+  partials: [Partials.GuildMember, Partials.Message],
 });
 
 // Every file in src/commands exports { data, execute } (or a list of them)
