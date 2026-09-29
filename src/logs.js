@@ -10,6 +10,7 @@ const LOG_TYPES = [
   'message_edited_logger', 'message_deleted_logger',
   'join_voice_logger', 'leave_voice_logger', 'voice_state_logger', 'move_logger', 'disconnect_logger',
   'create_channel_logger', 'delete_channel_logger', 'channel_updated_logger', 'channel_permission_updated_logger',
+  'automod_logger',
 ];
 
 // "📁・Ban-Logger" -> "ban", "role_updated_logger" -> "role_updated", "LOGs" -> "logs"

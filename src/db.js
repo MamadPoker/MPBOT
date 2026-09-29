@@ -12,6 +12,10 @@ db.exec(`
     guild_id TEXT NOT NULL, slug TEXT NOT NULL, last_live_id INTEGER,
     PRIMARY KEY (guild_id, slug)
   );
+  CREATE TABLE IF NOT EXISTS levels (
+    guild_id TEXT NOT NULL, user_id TEXT NOT NULL, xp INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (guild_id, user_id)
+  );
 `);
 
 function getSetting(guildId, key) {
