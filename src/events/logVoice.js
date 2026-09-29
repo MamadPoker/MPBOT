@@ -4,21 +4,20 @@ const { logEmbed, sendLog, findAuditExecutor } = require('../logs');
 
 // [voice state flag, text when turned on, text when turned off]
 const TOGGLES = [
-  ['selfMute', 'muted themselves', 'unmuted themselves'],
-  ['selfDeaf', 'deafened themselves', 'undeafened themselves'],
-  ['serverMute', 'was server muted', 'was server unmuted'],
-  ['serverDeaf', 'was server deafened', 'was server undeafened'],
+  ['selfMute', '**muted themselves**', '**unmuted themselves**'],
+  ['selfDeaf', '**deafened themselves**', '**undeafened themselves**'],
+  ['serverMute', '**was server muted**', '**was server unmuted**'],
+  ['serverDeaf', '**was server deafened**', '**was server undeafened**'],
 ];
 
-// Was this move/disconnect done by a moderator? No match in the audit log = the member did it themselves.
-// Only asks the audit log if that log channel is set up (saves requests on busy servers)
-async function modLogVoice(guild, logType, auditType, channelId, makeEmbed) {
-  if (!getSetting(guild.id, `log:${logType}`)) return;
-  const modId = await findAuditExecutor(guild, auditType, { channelId }).catch((err) => {
+const logOn = (guild, type) => Boolean(getSetting(guild.id, `log:${type}`));
+
+// Was this move/disconnect done by a moderator? Returns their id, or null (= the member did it themselves)
+function findModerator(guild, auditType, channelId) {
+  return findAuditExecutor(guild, auditType, { channelId }).catch((err) => {
     console.error(`Could not read the audit log in ${guild.name}:`, err.message);
     return null;
   });
-  if (modId) await sendLog(guild, logType, makeEmbed(`<@${modId}>`));
 }
 
 module.exports = {
@@ -33,26 +32,27 @@ module.exports = {
     const to = `<#${after.channelId}>`;
 
     if (!before.channelId && after.channelId) {
-      return sendLog(guild, 'join_voice_logger', logEmbed('green', { user, text: `${who} joined voice channel ${to}.` }));
+      return sendLog(guild, 'join_voice_logger', logEmbed('green', { user, text: `${who} **joined voice channel** ${to}.` }));
     }
     if (before.channelId && !after.channelId) {
-      await sendLog(guild, 'leave_voice_logger', logEmbed('red', { user, text: `${who} left voice channel ${from}.` }));
-      return modLogVoice(guild, 'disconnect_logger', AuditLogEvent.MemberDisconnect, null, (mod) =>
-        logEmbed('red', { user, text: `${who} was disconnected from ${from} by ${mod}.` }),
-      );
+      await sendLog(guild, 'leave_voice_logger', logEmbed('red', { user, text: `${who} **left voice channel** ${from}.` }));
+      if (!logOn(guild, 'disconnect_logger')) return; // don't read the audit log for nothing
+      const modId = await findModerator(guild, AuditLogEvent.MemberDisconnect, null);
+      if (modId) await sendLog(guild, 'disconnect_logger', logEmbed('red', { user, text: `${who} **was disconnected** by <@${modId}> from ${from}.` }));
+      return;
     }
 
     const lines = [];
-    if (before.channelId !== after.channelId) lines.push(`${who} moved from ${from} to ${to}.`);
+    if (before.channelId !== after.channelId) {
+      // Moved by a moderator -> move_logger ("was moved"). By themselves -> voice_state_logger ("switched").
+      const check = logOn(guild, 'move_logger') || logOn(guild, 'voice_state_logger');
+      const modId = check ? await findModerator(guild, AuditLogEvent.MemberMove, after.channelId) : null;
+      if (modId) await sendLog(guild, 'move_logger', logEmbed('orange', { user, text: `${who} **was moved** by <@${modId}> from ${from} to ${to}.` }));
+      else lines.push(`${who} **switched voice channel** ${from} => ${to}.`);
+    }
     for (const [key, on, off] of TOGGLES) {
       if (before[key] !== after[key]) lines.push(`${who} ${after[key] ? on : off} in ${to}.`);
     }
     if (lines.length) await sendLog(guild, 'voice_state_logger', logEmbed('orange', { user, text: lines.join('\n') }));
-
-    if (before.channelId !== after.channelId) {
-      await modLogVoice(guild, 'move_logger', AuditLogEvent.MemberMove, after.channelId, (mod) =>
-        logEmbed('orange', { user, text: `${who} was moved from ${from} to ${to} by ${mod}.` }),
-      );
-    }
   },
 };
