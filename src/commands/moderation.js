@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, InteractionContextType, MessageFlags } = require('discord.js');
-const { auditReason, field, logEmbed, userText, sendLog } = require('../logs');
+const { auditReason, field, logEmbed, sendLog } = require('../logs');
 
 const TIMEOUTS = [
   ['Remove timeout', 0],
@@ -147,12 +147,11 @@ module.exports = [
       const deleted = await interaction.channel.bulkDelete(messages.first(amount), true);
 
       // Bulk deletes don't say who did it, so /clear writes its own log (including what was deleted)
-      await sendLog(interaction.guild, 'message_deleted_logger', logEmbed('red', 'Messages cleared', [
-        field('Channel', `${interaction.channel}`, true),
-        field('Deleted', `${deleted.size} message(s)${user ? ` from ${user}` : ''}`, true),
-        field('By', userText(interaction.user), true),
-        field('Content', deleted.reverse().map((m) => `**${m.author.username}:** ${m.content || '*No text*'}`).join('\n')),
-      ]));
+      await sendLog(interaction.guild, 'message_deleted_logger', logEmbed('red', {
+        user: user ?? interaction.user, // whose messages were cleared, or the moderator if it was everyone's
+        text: `<@${interaction.user.id}> cleared ${deleted.size} message(s)${user ? ` from <@${user.id}>` : ''} in <#${interaction.channelId}>.`,
+        fields: [field('Content', deleted.reverse().map((m) => `**${m.author.username}:** ${m.content || '*No text*'}`).join('\n'))],
+      }));
       const note = deleted.size < amount ? '\n(Fewer than you asked for: there weren\'t that many, or some are older than 14 days.)' : '';
       return interaction.editReply(`🧹 Deleted ${deleted.size} message(s).${note}`);
     },

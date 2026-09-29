@@ -1,6 +1,6 @@
 const { Events, AuditLogEvent } = require('discord.js');
 const { db, getSetting } = require('../db');
-const { field, logEmbed, userText, sendLog, findAuditExecutor } = require('../logs');
+const { field, logEmbed, sendLog, findAuditExecutor } = require('../logs');
 
 const UNKNOWN = '*Unknown (sent more than 7 days ago, or before message logs were set up)*';
 const KEEP_FOR = 7 * 24 * 60 * 60 * 1000; // stored messages are deleted after 7 days
@@ -41,13 +41,11 @@ module.exports = [
       if (before.content === after.content) return; // e.g. a link preview loaded, not a real edit
       const old = before.partial ? getStored(after.id)?.content : before.content;
       db.prepare('UPDATE messages SET content = ? WHERE id = ?').run(after.content, after.id);
-      await sendLog(after.guild, 'message_edited_logger', logEmbed('orange', 'Message edited', [
-        field('Author', userText(after.author), true),
-        field('Channel', `${after.channel}`, true),
-        field('Before', old == null ? UNKNOWN : old || '*No text*'),
-        field('After', after.content || '*No text*'),
-        field('Message', `[Jump to message](${after.url})`),
-      ]));
+      await sendLog(after.guild, 'message_edited_logger', logEmbed('orange', {
+        user: after.author,
+        text: `<@${after.author.id}> edited a message in <#${after.channelId}>. [Jump to message](${after.url})`,
+        fields: [field('Before', old == null ? UNKNOWN : old || '*No text*'), field('After', after.content || '*No text*')],
+      }));
     },
   },
 
@@ -65,21 +63,22 @@ module.exports = [
       const files = message.partial ? stored?.attachments : message.attachments.map((a) => a.name).join(', ');
 
       // A moderator's delete shows up in the audit log; deleting your own message doesn't
-      let deletedBy = 'Unknown';
+      const channel = `<#${message.channelId}>`;
+      let text = `A message was deleted in ${channel}.`; // author unknown
       if (author) {
         const modId = await findAuditExecutor(message.guild, AuditLogEvent.MessageDelete, { channelId: message.channelId, targetId: author.id })
           .catch((err) => console.error(`Could not read the audit log in ${message.guild.name}:`, err.message));
-        if (modId === null) deletedBy = 'The author';
-        if (modId) deletedBy = userText(await message.client.users.fetch(modId).catch(() => ({ id: modId, username: 'unknown' })));
+        text = modId ? `<@${author.id}>'s message was deleted by <@${modId}> in ${channel}.`
+          : modId === null ? `<@${author.id}> deleted their message in ${channel}.`
+          : `A message by <@${author.id}> was deleted in ${channel}.`; // audit log unreadable
       }
 
-      await sendLog(message.guild, 'message_deleted_logger', logEmbed('red', 'Message deleted', [
-        field('Author', author ? userText(author) : 'Unknown', true),
-        field('Channel', `<#${message.channelId}>`, true),
-        field('Deleted by', deletedBy, true),
-        field('Content', content == null ? UNKNOWN : content || '*No text*'),
-        files && field('Attachments', files),
-      ]));
+      await sendLog(message.guild, 'message_deleted_logger', logEmbed('red', {
+        // The stored copy only has the id + name, so fetch the user for their avatar
+        user: author && (message.author ?? (await message.client.users.fetch(author.id).catch(() => author))),
+        text,
+        fields: [field('Content', content == null ? UNKNOWN : content || '*No text*'), files && field('Attachments', files)],
+      }));
     },
   },
 ];

@@ -1,12 +1,13 @@
 const { Events, AuditLogEvent } = require('discord.js');
 const { getSetting } = require('../db');
-const { field, logEmbed, userText, sendLog, findAuditExecutor } = require('../logs');
+const { logEmbed, sendLog, findAuditExecutor } = require('../logs');
 
+// [voice state flag, text when turned on, text when turned off]
 const TOGGLES = [
-  ['serverMute', 'Server muted', 'Server unmuted'],
-  ['serverDeaf', 'Server deafened', 'Server undeafened'],
-  ['selfMute', 'Muted', 'Unmuted'],
-  ['selfDeaf', 'Deafened', 'Undeafened'],
+  ['selfMute', 'muted themselves', 'unmuted themselves'],
+  ['selfDeaf', 'deafened themselves', 'undeafened themselves'],
+  ['serverMute', 'was server muted', 'was server unmuted'],
+  ['serverDeaf', 'was server deafened', 'was server undeafened'],
 ];
 
 // Was this move/disconnect done by a moderator? No match in the audit log = the member did it themselves.
@@ -17,9 +18,7 @@ async function modLogVoice(guild, logType, auditType, channelId, makeEmbed) {
     console.error(`Could not read the audit log in ${guild.name}:`, err.message);
     return null;
   });
-  if (!modId) return;
-  const mod = await guild.client.users.fetch(modId).catch(() => null);
-  await sendLog(guild, logType, makeEmbed(field('By', mod ? userText(mod) : `<@${modId}>`, true)));
+  if (modId) await sendLog(guild, logType, makeEmbed(`<@${modId}>`));
 }
 
 module.exports = {
@@ -28,31 +27,31 @@ module.exports = {
     const member = after.member ?? before.member;
     if (!member || member.user.bot) return;
     const { guild } = after;
-    const who = field('Member', userText(member.user), true);
+    const user = member.user;
+    const who = `<@${user.id}>`;
+    const from = `<#${before.channelId}>`; // Discord shows voice channel mentions as "🔊 name"
+    const to = `<#${after.channelId}>`;
 
     if (!before.channelId && after.channelId) {
-      return sendLog(guild, 'join_voice_logger', logEmbed('green', 'Joined voice', [who, field('Channel', `<#${after.channelId}>`, true)]));
+      return sendLog(guild, 'join_voice_logger', logEmbed('green', { user, text: `${who} joined voice channel ${to}.` }));
     }
     if (before.channelId && !after.channelId) {
-      await sendLog(guild, 'leave_voice_logger', logEmbed('red', 'Left voice', [who, field('Channel', `<#${before.channelId}>`, true)]));
-      return modLogVoice(guild, 'disconnect_logger', AuditLogEvent.MemberDisconnect, null, (by) =>
-        logEmbed('red', 'Disconnected from voice', [who, by, field('Channel', `<#${before.channelId}>`, true)]),
+      await sendLog(guild, 'leave_voice_logger', logEmbed('red', { user, text: `${who} left voice channel ${from}.` }));
+      return modLogVoice(guild, 'disconnect_logger', AuditLogEvent.MemberDisconnect, null, (mod) =>
+        logEmbed('red', { user, text: `${who} was disconnected from ${from} by ${mod}.` }),
       );
     }
 
-    const changes = [];
-    if (before.channelId !== after.channelId) changes.push(`Moved: <#${before.channelId}> → <#${after.channelId}>`);
+    const lines = [];
+    if (before.channelId !== after.channelId) lines.push(`${who} moved from ${from} to ${to}.`);
     for (const [key, on, off] of TOGGLES) {
-      if (before[key] !== after[key]) changes.push(after[key] ? on : off);
+      if (before[key] !== after[key]) lines.push(`${who} ${after[key] ? on : off} in ${to}.`);
     }
-    if (changes.length) {
-      await sendLog(guild, 'voice_state_logger', logEmbed('orange', 'Voice state changed', [
-        who, field('Channel', `<#${after.channelId}>`, true), field('Change', changes.join('\n')),
-      ]));
-    }
+    if (lines.length) await sendLog(guild, 'voice_state_logger', logEmbed('orange', { user, text: lines.join('\n') }));
+
     if (before.channelId !== after.channelId) {
-      await modLogVoice(guild, 'move_logger', AuditLogEvent.MemberMove, after.channelId, (by) =>
-        logEmbed('orange', 'Moved by a moderator', [who, by, field('From', `<#${before.channelId}>`, true), field('To', `<#${after.channelId}>`, true)]),
+      await modLogVoice(guild, 'move_logger', AuditLogEvent.MemberMove, after.channelId, (mod) =>
+        logEmbed('orange', { user, text: `${who} was moved from ${from} to ${to} by ${mod}.` }),
       );
     }
   },

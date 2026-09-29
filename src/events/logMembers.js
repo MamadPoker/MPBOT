@@ -1,5 +1,5 @@
 const { Events } = require('discord.js');
-const { field, logEmbed, userText, timeText, sendLog } = require('../logs');
+const { field, logEmbed, timeText, sendLog } = require('../logs');
 
 // Invite tracking: remember how many times each invite was used, then see which count went up when someone joins.
 // ponytail: if two people join at the exact same moment their invites can get mixed up; fine for normal servers.
@@ -46,22 +46,28 @@ module.exports = [
     name: Events.GuildMemberAdd,
     async execute(member) {
       const { guild, user } = member;
-      await sendLog(guild, 'join-server', logEmbed('green', 'Member joined', [
-        field('Member', userText(user)),
-        field('Account created', timeText(user.createdTimestamp), true),
-        field('Member count', guild.memberCount, true),
-      ]).setThumbnail(user.displayAvatarURL()));
+      const who = `<@${user.id}>`;
+      await sendLog(guild, 'join-server', logEmbed('green', {
+        user,
+        text: `${who} joined the server.`,
+        fields: [field('Account created', timeText(user.createdTimestamp), true), field('Member count', guild.memberCount, true)],
+      }));
 
-      let inviteFields;
+      let text;
       try {
         const invite = await findUsedInvite(guild);
-        inviteFields = invite
-          ? [field('Invite', `discord.gg/${invite.code}`, true), field('Created by', invite.inviterId ? `<@${invite.inviterId}>` : 'Unknown', true), field('Uses', invite.uses, true)]
-          : [field('Invite', guild.vanityURLCode ? `Probably the vanity link discord.gg/${guild.vanityURLCode}` : 'Unknown')];
+        if (invite) {
+          const creator = invite.inviterId ? ` created by <@${invite.inviterId}>` : '';
+          text = `${who} joined using invite **discord.gg/${invite.code}**${creator} (used ${invite.uses} times).`;
+        } else if (guild.vanityURLCode) {
+          text = `${who} joined, probably using the vanity link **discord.gg/${guild.vanityURLCode}**.`;
+        } else {
+          text = `${who} joined, but I couldn't tell which invite they used.`;
+        }
       } catch {
-        inviteFields = [field('Invite', 'Unknown: I need the **Manage Server** permission to see invites')];
+        text = `${who} joined, but I need the **Manage Server** permission to see which invite they used.`;
       }
-      await sendLog(guild, 'invite', logEmbed('blue', 'Joined with invite', [field('Member', userText(user)), ...inviteFields]));
+      await sendLog(guild, 'invite', logEmbed('blue', { user, text }));
     },
   },
 
@@ -69,12 +75,15 @@ module.exports = [
     name: Events.GuildMemberRemove,
     async execute(member) {
       const roles = member.partial ? 'Unknown' : member.roles.cache.filter((r) => r.id !== member.guild.id).map(String).join(' ') || 'None';
-      await sendLog(member.guild, 'left-server', logEmbed('red', 'Member left', [
-        field('Member', userText(member.user)),
-        field('Joined', member.joinedTimestamp ? timeText(member.joinedTimestamp) : 'Unknown', true),
-        field('Member count', member.guild.memberCount, true),
-        field('Roles', roles),
-      ]).setThumbnail(member.user.displayAvatarURL()));
+      await sendLog(member.guild, 'left-server', logEmbed('red', {
+        user: member.user,
+        text: `<@${member.user.id}> left the server.`,
+        fields: [
+          field('Joined', member.joinedTimestamp ? timeText(member.joinedTimestamp) : 'Unknown', true),
+          field('Member count', member.guild.memberCount, true),
+          field('Roles', roles),
+        ],
+      }));
     },
   },
 ];

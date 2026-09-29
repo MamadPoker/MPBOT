@@ -18,19 +18,24 @@ const simplifyName = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '_').re
 
 const COLORS = { green: 0x57f287, red: 0xed4245, orange: 0xf0b232, blue: 0x5865f2 };
 
-// Embed field (cut to Discord's 1024-character limit). Returns null for empty optional fields.
+// Embed field for extra details (cut to Discord's 1024-character limit)
 const field = (name, value, inline = false) => ({ name, value: String(value || '—').slice(0, 1024), inline });
 
-function logEmbed(color, title, fields) {
-  return new EmbedBuilder().setColor(COLORS[color]).setTitle(title).addFields(fields.filter(Boolean)).setTimestamp();
+// ProBot-style log: the member's avatar + username at the top, one short sentence, optional detail fields.
+// `user` is who the log is about (for moderation: the member it was done to).
+function logEmbed(color, { user, text, fields = [] }) {
+  const embed = new EmbedBuilder().setColor(COLORS[color]).setDescription(text).addFields(fields.filter(Boolean));
+  if (user) embed.setAuthor({ name: user.username, iconURL: user.displayAvatarURL?.() });
+  return embed;
 }
 
-const userText = (user) => `<@${user.id}> (${user.username})`;
 const timeText = (ms) => `<t:${Math.floor(ms / 1000)}:f> (<t:${Math.floor(ms / 1000)}:R>)`;
 
 async function sendLog(guild, type, embed) {
   const channelId = getSetting(guild.id, `log:${type}`);
   if (!channelId) return;
+  // Every log ends with the server's icon + name and the time ("MamadPoker • Today at 2:23 AM")
+  embed.setFooter({ text: guild.name, iconURL: guild.iconURL() }).setTimestamp();
   try {
     const channel = await guild.client.channels.fetch(channelId);
     await channel.send({ embeds: [embed] });
@@ -127,6 +132,6 @@ function describeOverwrite(changes) {
 }
 
 module.exports = {
-  LOG_TYPES, simplifyName, field, logEmbed, userText, timeText, sendLog,
+  LOG_TYPES, simplifyName, field, logEmbed, timeText, sendLog,
   auditReason, readAuditReason, findAuditExecutor, describeChanges, describeOverwrite,
 };

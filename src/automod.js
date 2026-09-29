@@ -1,6 +1,6 @@
 const { PermissionFlagsBits } = require('discord.js');
 const { getSetting, setSetting } = require('./db');
-const { field, logEmbed, userText, sendLog } = require('./logs');
+const { field, logEmbed, sendLog } = require('./logs');
 
 // Lowercase, and treat Arabic ي/ك the same as Persian ی/ک (they look identical)
 const normalize = (text) => text.normalize('NFKC').toLowerCase().replaceAll('ي', 'ی').replaceAll('ك', 'ک');
@@ -49,12 +49,11 @@ async function checkAutomod(message) {
     .send({ content: `⚠️ ${message.author}, your message was removed: ${problem.why}.`, allowedMentions: { users: [message.author.id] } })
     .catch(() => null);
   setTimeout(() => warning?.delete().catch(() => {}), 5000); // the warning disappears after 5 seconds
-  await sendLog(message.guild, 'automod_logger', logEmbed('red', 'Message blocked by auto-mod', [
-    field('Member', userText(message.author), true),
-    field('Channel', `${message.channel}`, true),
-    field('Reason', problem.detail),
-    field('Message', message.content),
-  ]));
+  await sendLog(message.guild, 'automod_logger', logEmbed('red', {
+    user: message.author,
+    text: `<@${message.author.id}>'s message in <#${message.channelId}> was removed by auto-mod.`,
+    fields: [field('Reason', problem.detail), field('Message', message.content)],
+  }));
   return true;
 }
 
