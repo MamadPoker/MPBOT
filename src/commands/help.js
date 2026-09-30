@@ -14,12 +14,8 @@ const FOOTER = { text: 'Only commands you can use are shown.' };
 const CATEGORIES = [
   { id: 'general', emoji: '🔧', name: 'General', about: 'Check the bot and get help', commands: ['ping', 'help', 'backup', 'servers'] },
   {
-    id: 'live', emoji: '📡', name: 'Live alerts', about: 'Post an alert when a Kick, Twitch or YouTube channel goes live', commands: ['live'],
-    notes: [
-      'The bot checks every 20 seconds and posts one alert per stream (title, category, thumbnail, link) in the alert channel, with an optional role ping. The same channel and role are used for all platforms.',
-      '`channel` takes a name (`xqc`, `@mrbeast`) or a link (`kick.com/…`, `twitch.tv/…`, `youtube.com/@…`, `youtube.com/channel/…`).',
-      'Twitch needs a free Twitch developer app (TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET in .env, see the README). YouTube: only real live streams, never premieres or uploads.',
-    ].join('\n'),
+    id: 'kick', emoji: '🟢', name: 'Kick alerts', about: 'Post an alert when a Kick channel goes live', commands: ['live'],
+    notes: 'The bot checks Kick every minute and posts one alert per stream (title, category, thumbnail, link), with an optional role ping.',
   },
   {
     id: 'welcome', emoji: '👋', name: 'Welcome', about: 'Welcome & goodbye messages with a picture card', commands: ['welcome', 'goodbye'],
@@ -63,8 +59,8 @@ const EXAMPLES = {
   'backup': '/backup',
   'servers list': '/servers list',
   'servers leave': '/servers leave server_id:123456789012345678',
-  'live add': '/live add platform:Twitch channel:xqc',
-  'live remove': '/live remove channel:twitch.tv/xqc',
+  'live add': '/live add channel:mamadpoker',
+  'live remove': '/live remove channel:mamadpoker',
   'live set-channel': '/live set-channel channel:#live-alerts',
   'live set-role': '/live set-role role:@Live',
   'live list': '/live list',
