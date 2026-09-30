@@ -1,6 +1,6 @@
 const {
   SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder,
-  PermissionFlagsBits, InteractionContextType, MessageFlags, ChannelType, escapeMarkdown,
+  PermissionFlagsBits, InteractionContextType, MessageFlags, escapeMarkdown,
 } = require('discord.js');
 const { db, getSetting } = require('../db');
 const { LOG_TYPES } = require('../logs');
@@ -10,11 +10,11 @@ const PAGE_SIZE = 10;
 const COLOR = 0x5865f2;
 const EXPIRED = 'This menu expired, run /servers list again.';
 
-// Every button/dropdown carries what it needs in its ID ("servers:<action>:<server id or ->:<page>[:<channel page>]"),
+// Every button/dropdown carries what it needs in its ID ("servers:<action>:<server id or ->:<page>"),
 // so they keep working after a restart; nothing is kept in memory.
-const id = (action, serverId, page, sub) => `servers:${action}:${serverId ?? '-'}:${page}${sub === undefined ? '' : `:${sub}`}`;
-const button = (action, serverId, page, label, style = ButtonStyle.Secondary, sub) =>
-  new ButtonBuilder().setCustomId(id(action, serverId, page, sub)).setLabel(label).setStyle(style);
+const id = (action, serverId, page) => `servers:${action}:${serverId ?? '-'}:${page}`;
+const button = (action, serverId, page, label, style = ButtonStyle.Secondary) =>
+  new ButtonBuilder().setCustomId(id(action, serverId, page)).setLabel(label).setStyle(style);
 
 const nameOf = (guild) => (guild.name ? escapeMarkdown(guild.name) : '*(unavailable)*');
 const when = (ms) => `<t:${Math.floor(ms / 1000)}:D> (<t:${Math.floor(ms / 1000)}:R>)`;
@@ -105,93 +105,9 @@ async function detailView(client, serverId, page) {
     components: [new ActionRowBuilder().addComponents(
       button('list', null, page, '⬅ Back'),
       button('detail', serverId, page, '🔄 Refresh'),
-      button('chan', serverId, page, '📋 Channels', ButtonStyle.Secondary, 0),
       button('ask', serverId, page, 'Leave server', ButtonStyle.Danger),
     )],
   };
-}
-
-// ---- Channel list: names and types only (built from the channel list discord.js already has; no messages are read) ----
-const ICONS = {
-  [ChannelType.GuildText]: '#', [ChannelType.GuildVoice]: '🔊', [ChannelType.GuildAnnouncement]: '📢',
-  [ChannelType.GuildStageVoice]: '🎭', [ChannelType.GuildForum]: '💬', [ChannelType.GuildMedia]: '🖼️',
-};
-const VOICE_TYPES = [ChannelType.GuildVoice, ChannelType.GuildStageVoice];
-const MAX_LINES = 40; // per page, also keeps each page well under Discord's 4096-character limit
-const MAX_CHARS = 3500;
-const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-
-// Same order as Discord's sidebar: by position; inside a category, text-type channels before voice-type ones
-const byPosition = (a, b) => a.rawPosition - b.rawPosition || a.id.length - b.id.length || a.id.localeCompare(b.id);
-const discordOrder = (a, b) => VOICE_TYPES.includes(a.type) - VOICE_TYPES.includes(b.type) || byPosition(a, b);
-
-function channelLines(guild) {
-  const all = [...guild.channels.cache.values()].filter((c) => !c.isThread?.());
-  const categories = all.filter((c) => c.type === ChannelType.GuildCategory).sort(byPosition);
-  const channels = all.filter((c) => c.type !== ChannelType.GuildCategory);
-  const isPrivate = (c) => !c.permissionsFor(guild.roles.everyone)?.has(PermissionFlagsBits.ViewChannel);
-  const line = (c) => `${ICONS[c.type] ?? '•'} ${escapeMarkdown(c.name)}${isPrivate(c) ? ' 🔒' : ''}`;
-  // Channels without a category first, then each category with its channels
-  const groups = [
-    { header: null, members: channels.filter((c) => !c.parentId || !categories.some((cat) => cat.id === c.parentId)) },
-    ...categories.map((cat) => ({
-      header: `**📁 ${escapeMarkdown(cat.name)}**${isPrivate(cat) ? ' 🔒' : ''}`,
-      members: channels.filter((c) => c.parentId === cat.id),
-    })),
-  ];
-  return {
-    summary: `**${count(channels.length, 'channel', 'channels')} in ${count(categories.length, 'category', 'categories')}**`,
-    groups: groups.map((g) => ({ header: g.header, lines: g.members.sort(discordOrder).map(line) })),
-  };
-}
-
-// Splits the groups into pages. A category never starts at the very bottom of a page, and one that
-// continues on the next page gets its header again ("(continued)").
-function channelPages({ groups }) {
-  const pages = [];
-  let lines;
-  let size;
-  const newPage = () => { lines = []; size = 0; pages.push(lines); };
-  const push = (text) => { lines.push(text); size += text.length + 1; };
-  const fits = (...texts) => lines.length + texts.length <= MAX_LINES && size + texts.join('\n').length + 1 <= MAX_CHARS;
-  newPage();
-  for (const { header, lines: items } of groups) {
-    if (header && lines.length && !fits(header, items[0] ?? '')) newPage();
-    if (header) push(header);
-    for (const text of items) {
-      if (lines.length && !fits(text)) {
-        newPage();
-        if (header) push(`${header} (continued)`);
-      }
-      push(text);
-    }
-  }
-  return pages;
-}
-
-function channelsView(client, serverId, page, interaction, channelPage) {
-  const guild = client.guilds.cache.get(serverId);
-  if (!guild) return gone(client, page);
-  const list = channelLines(guild);
-  const pages = channelPages(list);
-  const current = Math.min(Math.max(channelPage || 0, 0), pages.length - 1);
-  const embed = new EmbedBuilder()
-    .setColor(COLOR)
-    .setTitle(`📋 Channels — ${guild.name ?? guild.id}`)
-    .setDescription([list.summary, '', ...pages[current]].join('\n'))
-    .setFooter({ text: `Page ${current + 1}/${pages.length} • Updated just now` })
-    .setTimestamp();
-  const buttons = [
-    button('detail', serverId, page, '⬅ Back to server'),
-    button('chan', serverId, page, '🔄 Refresh', ButtonStyle.Secondary, current),
-  ];
-  if (pages.length > 1) {
-    buttons.push(
-      button('chan', serverId, page, 'Previous', ButtonStyle.Secondary, current - 1).setDisabled(current === 0),
-      button('chan', serverId, page, 'Next', ButtonStyle.Secondary, current + 1).setDisabled(current === pages.length - 1),
-    );
-  }
-  return { content: '', embeds: [embed], components: [new ActionRowBuilder().addComponents(buttons)] };
 }
 
 // ---- "Are you sure?" before leaving ----
@@ -221,7 +137,6 @@ const VIEWS = {
   detail: detailView,
   ask: confirmView,
   leave: leaveView,
-  chan: channelsView,
 };
 
 module.exports = {
@@ -253,13 +168,12 @@ module.exports = {
   // Buttons and the dropdown
   async handleComponent(interaction) {
     if (await refuseNonOwner(interaction)) return;
-    const [, action, serverId, page, sub] = interaction.customId.split(':');
+    const [, action, serverId, page] = interaction.customId.split(':');
     const view = VIEWS[action];
     if (!view) return interaction.reply({ content: EXPIRED, flags: MessageFlags.Ephemeral }); // e.g. a menu from an older version
     try {
       await interaction.deferUpdate(); // answer Discord within its 3-second limit, then do the (slower) work
-      const serverOrNull = serverId === '-' ? null : serverId;
-      await interaction.editReply(await view(interaction.client, serverOrNull, Number(page) || 0, interaction, Number(sub) || 0));
+      await interaction.editReply(await view(interaction.client, serverId === '-' ? null : serverId, Number(page) || 0, interaction));
     } catch (err) {
       console.error('/servers menu error:', err.message);
       await interaction.followUp({ content: EXPIRED, flags: MessageFlags.Ephemeral }).catch(() => {});
