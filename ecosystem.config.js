@@ -12,6 +12,9 @@ module.exports = {
       // Wait a bit longer after each crash: 1s, 1.5s, 2.3s, ... up to 15s (PM2's maximum),
       // so it keeps retrying until the internet is back. Resets once the bot has been up for 30s.
       exp_backoff_restart_delay: 1000,
+      // On Windows, PM2 can't send a real stop signal; this makes it send a "shutdown" message instead,
+      // so the bot can record a clean stop/restart (for the "I was offline" DM) before exiting.
+      shutdown_with_message: true,
     },
   ],
 };

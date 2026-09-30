@@ -3,6 +3,7 @@ const path = require('node:path');
 const { Client, Collection, GatewayIntentBits, Partials } = require('discord.js');
 const { startWatchdog } = require('./watchdog');
 const { PRESENCE, keepPresence } = require('./presence');
+const { startOfflineNotices, recordShutdown } = require('./offline');
 
 // Read DISCORD_TOKEN from .env (built into Node, no dotenv needed)
 try {
@@ -44,8 +45,23 @@ for (const file of fs.readdirSync(path.join(__dirname, 'events')).filter((f) => 
 // Log errors instead of crashing the whole bot
 process.on('unhandledRejection', (err) => console.error('Unhandled error:', err));
 
+// Remember why the bot stopped, so the "I was offline" DM to the owner can say why
+const stop = (reason, exitCode) => {
+  recordShutdown(reason);
+  process.exit(exitCode);
+};
+process.on('SIGINT', () => stop('clean', 0)); // Ctrl+C
+process.on('SIGTERM', () => stop('clean', 0));
+// pm2 stop/restart on Windows sends this message instead of a signal (shutdown_with_message in ecosystem.config.js)
+process.on('message', (msg) => msg === 'shutdown' && stop('clean', 0));
+process.on('uncaughtException', (err) => {
+  console.error('Crashed:', err);
+  stop('crash', 1);
+});
+startOfflineNotices(client);
+
 // Offline from Discord for 2+ minutes (e.g. after a VPN drop)? Exit, and PM2 starts the bot fresh.
-startWatchdog(client);
+startWatchdog(client, () => stop('watchdog', 1));
 
 // No internet at startup? Exit right away, and PM2 tries again a little later.
 client.login(process.env.DISCORD_TOKEN).catch((err) => {
