@@ -1,6 +1,12 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { db, getSetting } = require('./db');
 
+const CHECK_EVERY = 20_000; // normal time between checks
+const GAP = 1_000; // pause between Kick requests within one check, to go easy on Kick
+const MAX_BACKOFF = 5 * 60_000; // longest wait after errors (unless Kick asks for longer)
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 // ponytail: unofficial kick.com endpoint (no API key needed); switch to the official
 // api.kick.com with an app token if Kick starts blocking it.
 async function fetchKickChannel(slug) {
@@ -9,7 +15,12 @@ async function fetchKickChannel(slug) {
     signal: AbortSignal.timeout(10_000),
   });
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`Kick returned HTTP ${res.status} for "${slug}"`);
+  if (!res.ok) {
+    const err = new Error(`Kick returned HTTP ${res.status} for "${slug}"`);
+    // 429 = too many requests; Retry-After says how many seconds Kick wants us to wait
+    err.retryAfter = Number(res.headers.get('retry-after')) * 1000 || 0;
+    throw err;
+  }
   return res.json();
 }
 
@@ -44,18 +55,15 @@ function buildLiveMessage(channel, mention) {
   };
 }
 
+// Checks every followed Kick channel, one request at a time. If Kick fails or says "slow down",
+// this throws and the rest waits for the next check (see startKickAlerts).
 async function checkKickChannels(client) {
   const rows = db.prepare('SELECT guild_id, slug, last_live_id FROM kick_channels').all();
 
   // Fetch each Kick channel once, even if several servers follow it
-  for (const slug of new Set(rows.map((r) => r.slug))) {
-    let channel;
-    try {
-      channel = await fetchKickChannel(slug);
-    } catch (err) {
-      console.error(`Kick check failed for ${slug}:`, err.message);
-      continue;
-    }
+  for (const [i, slug] of [...new Set(rows.map((r) => r.slug))].entries()) {
+    if (i > 0) await sleep(GAP);
+    const channel = await fetchKickChannel(slug);
     const live = channel?.livestream;
     if (!live) continue;
 
@@ -76,10 +84,22 @@ async function checkKickChannels(client) {
   }
 }
 
+// Checks every 20 seconds. After an error (429 rate limit, blocked, Kick down, no internet) it waits
+// longer each time (40s, 80s, 160s, up to 5 min, or as long as Kick asks), then goes back to 20s once a check works.
 function startKickAlerts(client) {
-  const run = () => checkKickChannels(client).catch((err) => console.error('Kick check error:', err));
-  run();
-  setInterval(run, 60_000);
+  let wait = CHECK_EVERY;
+  const loop = async () => {
+    const started = Date.now();
+    try {
+      await checkKickChannels(client);
+      wait = CHECK_EVERY;
+    } catch (err) {
+      wait = Math.max(Math.min(wait * 2, MAX_BACKOFF), err.retryAfter ?? 0);
+      console.error(`Kick check failed (${err.message}). Next check in ${Math.round(wait / 1000)}s.`);
+    }
+    setTimeout(loop, Math.max(wait - (Date.now() - started), 0)); // 20s from the start of this check
+  };
+  loop();
 }
 
 module.exports = { fetchKickChannel, parseSlug, roleMention, buildLiveMessage, startKickAlerts };
