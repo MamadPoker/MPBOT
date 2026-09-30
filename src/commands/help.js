@@ -1,12 +1,11 @@
 const {
-  SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle,
+  SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder,
   InteractionContextType, MessageFlags, ApplicationCommandOptionType: T, PermissionsBitField,
 } = require('discord.js');
 const { LOG_TYPES } = require('../logs');
 const { levelingEnabled } = require('../leveling');
 const { automodEnabled } = require('../automod');
 
-const KICK_URL = 'https://kick.com/mamadpoker';
 const COLOR = 0x53fc18;
 const FOOTER = { text: 'Only commands you can use are shown.' };
 
@@ -144,8 +143,7 @@ function components(categories, current) {
       { label: 'Main page', value: 'home', emoji: { name: '🏠' }, default: current === 'home' },
       ...categories.map((c) => ({ label: c.name, value: c.id, emoji: { name: c.emoji }, description: c.about, default: current === c.id })),
     );
-  const kick = new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Watch MamadPoker on Kick').setURL(KICK_URL);
-  return [new ActionRowBuilder().addComponents(menu), new ActionRowBuilder().addComponents(kick)];
+  return [new ActionRowBuilder().addComponents(menu)];
 }
 
 function mainPage(interaction) {
