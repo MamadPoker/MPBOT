@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { db, getSetting, setSetting } = require('./db');
+const { dmOwner } = require('./owner');
 
 // HOW TO RESTORE A BACKUP (if data.db is broken or lost):
 //   1. pm2 stop mpbot
@@ -40,11 +41,8 @@ function makeBackup() {
   return file;
 }
 
-async function sendBackupToOwner(client, file) {
-  if (!process.env.OWNER_ID) throw new Error('OWNER_ID is not set in .env');
-  const owner = await client.users.fetch(process.env.OWNER_ID);
-  await owner.send({ content: `🗄️ MP Bot database backup (\`${path.basename(file)}\`). Keep it somewhere safe.`, files: [file] });
-}
+const sendBackupToOwner = (client, file) =>
+  dmOwner(client, { content: `🗄️ MP Bot database backup (\`${path.basename(file)}\`). Keep it somewhere safe.`, files: [file] });
 
 async function nightlyBackup(client) {
   const file = makeBackup();

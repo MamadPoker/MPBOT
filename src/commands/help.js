@@ -5,13 +5,14 @@ const {
 const { LOG_TYPES } = require('../logs');
 const { levelingEnabled } = require('../leveling');
 const { automodEnabled } = require('../automod');
+const { isOwner } = require('../owner');
 
 const COLOR = 0x53fc18;
 const FOOTER = { text: 'Only commands you can use are shown.' };
 
 // Command descriptions and options come from the commands themselves; categories, tips and examples live here.
 const CATEGORIES = [
-  { id: 'general', emoji: '🔧', name: 'General', about: 'Check the bot and get help', commands: ['ping', 'help', 'backup'] },
+  { id: 'general', emoji: '🔧', name: 'General', about: 'Check the bot and get help', commands: ['ping', 'help', 'backup', 'servers'] },
   {
     id: 'kick', emoji: '🟢', name: 'Kick alerts', about: 'Post an alert when a Kick channel goes live', commands: ['live'],
     notes: 'The bot checks Kick every minute and posts one alert per stream (title, category, thumbnail, link), with an optional role ping.',
@@ -56,6 +57,8 @@ const EXAMPLES = {
   'ping': '/ping',
   'help': '/help command:welcome',
   'backup': '/backup',
+  'servers list': '/servers list',
+  'servers leave': '/servers leave server_id:123456789012345678',
   'live add': '/live add channel:mamadpoker',
   'live remove': '/live remove channel:mamadpoker',
   'live set-channel': '/live set-channel channel:#live-alerts',
@@ -103,7 +106,7 @@ function permissionText(command) {
 }
 
 const canUse = (interaction, command) => {
-  if (command.ownerOnly) return interaction.user.id === process.env.OWNER_ID;
+  if (command.ownerOnly) return isOwner(interaction.user);
   const needed = command.data.toJSON().default_member_permissions;
   return !needed || interaction.memberPermissions.has(BigInt(needed));
 };

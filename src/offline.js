@@ -1,5 +1,6 @@
 const { Events } = require('discord.js');
 const { getSetting, setSetting } = require('./db');
+const { dmOwner } = require('./owner');
 
 // "I was offline" DMs to the owner. While connected, the bot saves a heartbeat time every minute.
 // When it connects again, a gap since the last heartbeat = it was offline.
@@ -85,9 +86,7 @@ async function flush(client) {
   setSetting(BOT, 'offline_pending', null);
   const text = offlineMessage(pending);
   try {
-    if (!process.env.OWNER_ID) throw new Error('OWNER_ID is not set in .env');
-    const owner = await client.users.fetch(process.env.OWNER_ID);
-    await owner.send(text);
+    await dmOwner(client, text);
     setSetting(BOT, 'offline_dm_at', Date.now());
     console.log(`Offline DM sent to the owner (${pending.length} offline period(s)).`);
   } catch (err) {
