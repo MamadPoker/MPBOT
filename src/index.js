@@ -47,7 +47,7 @@ process.on('unhandledRejection', (err) => console.error('Unhandled error:', err)
 
 // Remember why the bot stopped, so the "I was offline" DM to the owner can say why
 const stop = (reason, exitCode) => {
-  recordShutdown(reason);
+  recordShutdown(reason, client);
   process.exit(exitCode);
 };
 process.on('SIGINT', () => stop('clean', 0)); // Ctrl+C

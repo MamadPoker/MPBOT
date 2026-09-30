@@ -15,6 +15,8 @@ module.exports = {
       // On Windows, PM2 can't send a real stop signal; this makes it send a "shutdown" message instead,
       // so the bot can record a clean stop/restart (for the "I was offline" DM) before exiting.
       shutdown_with_message: true,
+      // Put the date and time in front of every line in `pm2 logs` (laptop time)
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
     },
   ],
 };

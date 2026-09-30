@@ -1,4 +1,4 @@
-const { Events, Status } = require('discord.js');
+const { Events } = require('discord.js');
 const { getSetting, setSetting } = require('./db');
 
 // "I was offline" DMs to the owner. While connected, the bot saves a heartbeat time every minute.
@@ -20,19 +20,30 @@ const REASONS = {
 
 const json = (key, fallback) => JSON.parse(getSetting(BOT, key) ?? JSON.stringify(fallback));
 
-// Really connected: ready, and Discord answered a heartbeat recently (after sleep the old connection
-// still says "ready" for a while, so the heartbeat age is what counts)
-const isConnected = (client) =>
-  client.isReady() && client.ws.shards.size > 0 &&
-  client.ws.shards.every((s) => s.status === Status.Ready && Date.now() - s.lastPingTimestamp < 90_000);
+// Saves the last moment we KNOW the bot was connected: Discord's latest answer to a heartbeat.
+// Not "now": after a VPN drop the dead connection still says "ready" for up to ~80 seconds (until
+// discord.js notices), and saving "now" during that time made outages look shorter than they were.
+// Never moves backwards.
+function saveHeartbeat(client) {
+  if (!client.isReady() || !client.ws.shards.size) return;
+  const lastAnswer = Math.min(...client.ws.shards.map((s) => s.lastPingTimestamp)); // -1 = none yet
+  if (lastAnswer > Number(getSetting(BOT, 'heartbeat_at') ?? 0)) setSetting(BOT, 'heartbeat_at', lastAnswer);
+}
 
 // Called when the bot is about to stop. Keeps the FIRST reason after the last heartbeat
 // (e.g. a VPN drop -> watchdog restart -> several failed logins: the watchdog is the real reason).
-function recordShutdown(kind) {
+function recordShutdown(kind, client) {
+  if (client) saveHeartbeat(client); // a clean stop: remember how recently it was still connected
   const previous = json('shutdown', null);
   if (previous && previous.at >= Number(getSetting(BOT, 'heartbeat_at') ?? 0)) return;
   setSetting(BOT, 'shutdown', JSON.stringify({ at: Date.now(), kind }));
 }
+
+// "2m 48s" (for the logs)
+const exact = (ms) => {
+  const s = Math.round(ms / 1000);
+  return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+};
 
 // "1h 12m", "5m", "2d 3h"
 function formatDuration(ms) {
@@ -64,6 +75,7 @@ async function flush(client) {
   if (!pending.length) return;
   const wait = Number(getSetting(BOT, 'offline_dm_at') ?? 0) + DM_EVERY - Date.now();
   if (wait > 0) {
+    if (!flushTimer) console.log(`Offline DM waits ${exact(wait)} (at most one DM per 10 minutes); ${pending.length} offline period(s) queued.`);
     flushTimer ??= setTimeout(() => {
       flushTimer = null;
       flush(client);
@@ -77,6 +89,7 @@ async function flush(client) {
     const owner = await client.users.fetch(process.env.OWNER_ID);
     await owner.send(text);
     setSetting(BOT, 'offline_dm_at', Date.now());
+    console.log(`Offline DM sent to the owner (${pending.length} offline period(s)).`);
   } catch (err) {
     console.error(`Couldn't DM the owner about being offline (${err.message}):\n${text}`);
   }
@@ -86,15 +99,23 @@ async function flush(client) {
 function onConnected(client) {
   const now = Date.now();
   const last = Number(getSetting(BOT, 'heartbeat_at') ?? 0);
-  setSetting(BOT, 'heartbeat_at', now);
-  if (last && now - last > MIN_GAP) {
-    const shutdown = json('shutdown', null);
-    const reason = last >= startedAt ? 'connection' // this same process wrote the last heartbeat: it never stopped
-      : shutdown && shutdown.at >= last ? shutdown.kind
-      : 'unknown';
+  const shutdown = json('shutdown', null);
+  setSetting(BOT, 'heartbeat_at', now); // connected right now
+  setSetting(BOT, 'shutdown', null);
+  if (!last) {
+    console.log('Offline check: no earlier heartbeat saved (first start), nothing to report.');
+    return flush(client);
+  }
+  const gap = now - last;
+  const reason = last >= startedAt ? 'connection' // this same process saved the last heartbeat: it never stopped
+    : shutdown && shutdown.at >= last ? shutdown.kind
+    : 'unknown';
+  if (gap <= MIN_GAP) {
+    console.log(`Offline check: ${exact(gap)} since the last answered heartbeat (reason: ${reason}) -> no DM, shorter than 3 minutes.`);
+  } else {
+    console.log(`Offline check: ${exact(gap)} since the last answered heartbeat (${formatPeriod(last, now)} Istanbul time, reason: ${reason}) -> DM queued.`);
     setSetting(BOT, 'offline_pending', JSON.stringify([...json('offline_pending', []), { from: last, to: now, reason }]));
   }
-  setSetting(BOT, 'shutdown', null);
   return flush(client);
 }
 
@@ -102,9 +123,7 @@ function startOfflineNotices(client) {
   const connected = () => onConnected(client).catch((err) => console.error('Offline notice error:', err.message));
   client.on(Events.ShardReady, connected);
   client.on(Events.ShardResume, connected);
-  setInterval(() => {
-    if (isConnected(client)) setSetting(BOT, 'heartbeat_at', Date.now());
-  }, HEARTBEAT_EVERY);
+  setInterval(() => saveHeartbeat(client), HEARTBEAT_EVERY);
 }
 
 module.exports = { startOfflineNotices, recordShutdown, formatDuration, formatPeriod, offlineMessage };
