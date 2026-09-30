@@ -8,9 +8,11 @@ db.exec(`
     guild_id TEXT NOT NULL, key TEXT NOT NULL, value TEXT,
     PRIMARY KEY (guild_id, key)
   );
-  CREATE TABLE IF NOT EXISTS kick_channels (
-    guild_id TEXT NOT NULL, slug TEXT NOT NULL, last_live_id INTEGER,
-    PRIMARY KEY (guild_id, slug)
+  -- Channels followed for live alerts. platform: kick / twitch / youtube.
+  -- channel_id: Kick slug, Twitch user ID, YouTube channel ID (UC...). last_live_id: the last stream alerted.
+  CREATE TABLE IF NOT EXISTS live_channels (
+    guild_id TEXT NOT NULL, platform TEXT NOT NULL, channel_id TEXT NOT NULL, name TEXT NOT NULL, last_live_id TEXT,
+    PRIMARY KEY (guild_id, platform, channel_id)
   );
   CREATE TABLE IF NOT EXISTS levels (
     guild_id TEXT NOT NULL, user_id TEXT NOT NULL, xp INTEGER NOT NULL DEFAULT 0,
@@ -24,6 +26,25 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS messages_created_at ON messages (created_at);
 `);
 
+// Before Twitch/YouTube, followed channels were in "kick_channels" (all Kick). Move them over once,
+// all or nothing, keeping which stream was already alerted.
+function migrateKickChannels(database) {
+  if (!database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'kick_channels'").get()) return;
+  database.exec('BEGIN');
+  try {
+    database.exec(`
+      INSERT OR IGNORE INTO live_channels (guild_id, platform, channel_id, name, last_live_id)
+        SELECT guild_id, 'kick', slug, slug, CAST(last_live_id AS TEXT) FROM kick_channels;
+      DROP TABLE kick_channels;
+    `);
+    database.exec('COMMIT');
+  } catch (err) {
+    database.exec('ROLLBACK');
+    throw err;
+  }
+}
+migrateKickChannels(db);
+
 function getSetting(guildId, key) {
   return db.prepare('SELECT value FROM settings WHERE guild_id = ? AND key = ?').get(guildId, key)?.value ?? null;
 }
@@ -36,4 +57,4 @@ function setSetting(guildId, key, value) {
   ).run(guildId, key, String(value));
 }
 
-module.exports = { db, getSetting, setSetting };
+module.exports = { db, getSetting, setSetting, migrateKickChannels };

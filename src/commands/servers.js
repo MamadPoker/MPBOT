@@ -2,8 +2,9 @@ const {
   SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder,
   PermissionFlagsBits, InteractionContextType, MessageFlags, escapeMarkdown,
 } = require('discord.js');
-const { db, getSetting } = require('../db');
+const { getSetting } = require('../db');
 const { LOG_TYPES } = require('../logs');
+const { PLATFORMS, ALERT_CHANNEL, followed } = require('../live');
 const { refuseNonOwner } = require('../owner');
 
 const PAGE_SIZE = 10;
@@ -59,11 +60,11 @@ function listView(client, page, note = '') {
 function features(guildId) {
   const on = (key) => Boolean(getSetting(guildId, key));
   const logs = LOG_TYPES.filter((t) => on(`log:${t}`)).length;
-  const kick = db.prepare('SELECT slug FROM kick_channels WHERE guild_id = ?').all(guildId).map((r) => r.slug);
+  const live = followed(guildId).map((r) => `${PLATFORMS[r.platform].label}: ${r.name}`);
   const line = (ok, label) => `${ok ? '✅' : '❌'} ${label}`;
   return [
     line(logs > 0, `Logs${logs ? ` (${logs}/${LOG_TYPES.length} channels)` : ''}`),
-    line(on('kick_alert_channel') && kick.length > 0, `Kick alerts${kick.length ? ` (${kick.join(', ')})` : ''}`),
+    line(on(ALERT_CHANNEL) && live.length > 0, `Live alerts${live.length ? ` (${live.join(', ')})` : ''}`),
     line(on('welcome_channel'), 'Welcome'),
     line(on('goodbye_channel'), 'Goodbye'),
     line(on('autorole'), 'Auto-role'),
