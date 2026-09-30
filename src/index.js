@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { Client, Collection, GatewayIntentBits, Partials } = require('discord.js');
+const { startWatchdog } = require('./watchdog');
 
 // Read DISCORD_TOKEN from .env (built into Node, no dotenv needed)
 try {
@@ -40,4 +41,11 @@ for (const file of fs.readdirSync(path.join(__dirname, 'events')).filter((f) => 
 // Log errors instead of crashing the whole bot
 process.on('unhandledRejection', (err) => console.error('Unhandled error:', err));
 
-client.login(process.env.DISCORD_TOKEN);
+// Offline from Discord for 2+ minutes (e.g. after a VPN drop)? Exit, and PM2 starts the bot fresh.
+startWatchdog(client);
+
+// No internet at startup? Exit right away, and PM2 tries again a little later.
+client.login(process.env.DISCORD_TOKEN).catch((err) => {
+  console.error('Could not log in to Discord:', err.message);
+  process.exit(1);
+});
