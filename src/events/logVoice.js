@@ -31,11 +31,21 @@ module.exports = {
     const from = `<#${before.channelId}>`; // Discord shows voice channel mentions as "🔊 name"
     const to = `<#${after.channelId}>`;
 
-    if (!before.channelId && after.channelId) {
-      return sendLog(guild, 'join_voice_logger', logEmbed('green', { user, text: `${who} **joined voice channel** ${to}.` }));
+    const logJoin = () => sendLog(guild, 'join_voice_logger', logEmbed('green', { user, text: `${who} **joined voice channel** ${to}.` }));
+    const logLeave = () => sendLog(guild, 'leave_voice_logger', logEmbed('red', { user, text: `${who} **left voice channel** ${from}.` }));
+
+    // Same channel but a new voice session: they dropped and came back in one update (e.g. Discord reloaded
+    // with Ctrl+R, or they rejoined from another device). Log it like a normal leave + join.
+    const rejoined = before.channelId && before.channelId === after.channelId
+      && before.sessionId && after.sessionId && before.sessionId !== after.sessionId;
+    if (rejoined) {
+      await logLeave();
+      return logJoin();
     }
+
+    if (!before.channelId && after.channelId) return logJoin();
     if (before.channelId && !after.channelId) {
-      await sendLog(guild, 'leave_voice_logger', logEmbed('red', { user, text: `${who} **left voice channel** ${from}.` }));
+      await logLeave(); // sent right away; the moderator check below doesn't delay it or a quick rejoin
       if (!logOn(guild, 'disconnect_logger')) return; // don't read the audit log for nothing
       const modId = await findModerator(guild, AuditLogEvent.MemberDisconnect, null);
       if (modId) await sendLog(guild, 'disconnect_logger', logEmbed('red', { user, text: `${who} **was disconnected** by <@${modId}> from ${from}.` }));
