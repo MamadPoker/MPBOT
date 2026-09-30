@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Client, Collection, GatewayIntentBits, Partials } = require('discord.js');
 const { startWatchdog } = require('./watchdog');
+const { PRESENCE, keepPresence } = require('./presence');
 
 // Read DISCORD_TOKEN from .env (built into Node, no dotenv needed)
 try {
@@ -23,7 +24,9 @@ const client = new Client({
   ],
   // Lets us see leaves/deletes/edits even for members and messages from before the bot started
   partials: [Partials.GuildMember, Partials.Message],
+  presence: PRESENCE, // "Playing /help", sent with every login
 });
+keepPresence(client); // ...and again after every resumed reconnect
 
 // Every file in src/commands exports { data, execute } (or a list of them)
 client.commands = new Collection();
