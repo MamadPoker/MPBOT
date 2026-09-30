@@ -1,5 +1,5 @@
 const { EmbedBuilder, PermissionsBitField } = require('discord.js');
-const { getSetting } = require('./db');
+const { db, getSetting } = require('./db');
 
 // Every log type is named after its channel (same names as ProBot's LOGs category)
 const LOG_TYPES = [
@@ -43,6 +43,14 @@ async function sendLog(guild, type, embed) {
     console.error(`Could not send ${type} log in ${guild.name}:`, err.message);
   }
 }
+
+// Every channel that receives logs (anything set with /log)
+const logChannelIds = (guildId) =>
+  new Set(db.prepare("SELECT value FROM settings WHERE guild_id = ? AND key LIKE 'log:%'").all(guildId).map((r) => r.value));
+
+// One of our own log embeds? (sendLog above gives every log the server name as footer, plus a timestamp)
+const isOwnLog = (message) =>
+  message.author?.id === message.client.user?.id && message.embeds.some((e) => e.footer?.text === message.guild.name && e.timestamp);
 
 // Our /ban, /kick and /timeout run as the bot, so Discord's audit log says the bot did it.
 // We add the real moderator to the audit reason, and read it back when logging.
@@ -132,6 +140,6 @@ function describeOverwrite(changes) {
 }
 
 module.exports = {
-  LOG_TYPES, simplifyName, field, logEmbed, timeText, sendLog,
+  LOG_TYPES, simplifyName, field, logEmbed, timeText, sendLog, logChannelIds, isOwnLog,
   auditReason, readAuditReason, findAuditExecutor, describeChanges, describeOverwrite,
 };
