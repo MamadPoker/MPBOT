@@ -144,3 +144,6 @@ vite.config.ts.timestamp-*
 
 # Bot database (per-server settings)
 data.db*
+
+# Database backups (contain saved messages, keep them private)
+backups/

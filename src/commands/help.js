@@ -11,7 +11,7 @@ const FOOTER = { text: 'Only commands you can use are shown.' };
 
 // Command descriptions and options come from the commands themselves; categories, tips and examples live here.
 const CATEGORIES = [
-  { id: 'general', emoji: '🔧', name: 'General', about: 'Check the bot and get help', commands: ['ping', 'help'] },
+  { id: 'general', emoji: '🔧', name: 'General', about: 'Check the bot and get help', commands: ['ping', 'help', 'backup'] },
   {
     id: 'kick', emoji: '🟢', name: 'Kick alerts', about: 'Post an alert when a Kick channel goes live', commands: ['live'],
     notes: 'The bot checks Kick every minute and posts one alert per stream (title, category, thumbnail, link), with an optional role ping.',
@@ -55,6 +55,7 @@ const CATEGORIES = [
 const EXAMPLES = {
   'ping': '/ping',
   'help': '/help command:welcome',
+  'backup': '/backup',
   'live add': '/live add channel:mamadpoker',
   'live remove': '/live remove channel:mamadpoker',
   'live set-channel': '/live set-channel channel:#live-alerts',
@@ -93,13 +94,16 @@ const EXAMPLES = {
 const OPTION_TYPES = { [T.String]: 'text', [T.Integer]: 'number', [T.Boolean]: 'true/false', [T.User]: 'user', [T.Channel]: 'channel', [T.Role]: 'role', [T.Attachment]: 'file' };
 const PERMISSION_NAMES = { ManageGuild: 'Admin only (Manage Server)', ModerateMembers: 'Timeout Members' };
 
-function permissionText(json) {
+function permissionText(command) {
+  if (command.ownerOnly) return '🔒 Bot owner only';
+  const json = command.data.toJSON();
   if (!json.default_member_permissions) return '✅ Everyone';
   const names = new PermissionsBitField(BigInt(json.default_member_permissions)).toArray();
   return `🔒 ${names.map((p) => PERMISSION_NAMES[p] ?? p.replace(/([a-z])([A-Z])/g, '$1 $2')).join(', ')}`;
 }
 
 const canUse = (interaction, command) => {
+  if (command.ownerOnly) return interaction.user.id === process.env.OWNER_ID;
   const needed = command.data.toJSON().default_member_permissions;
   return !needed || interaction.memberPermissions.has(BigInt(needed));
 };
@@ -117,7 +121,7 @@ function commandFields(command) {
     });
     const example = EXAMPLES[path] ?? `/${path}${(cmd.options ?? []).filter((o) => o.required).map((o) => ` ${o.name}:…`).join('')}`;
     return {
-      name: `/${path}  ·  ${permissionText(json)}`,
+      name: `/${path}  ·  ${permissionText(command)}`,
       value: [cmd.description, ...options, `**Example:** \`${example}\``].join('\n').slice(0, 1024),
     };
   });
@@ -188,7 +192,7 @@ function commandPage(interaction, name) {
     .setDescription([
       json.description,
       `**Category:** ${category.emoji} ${category.name}${offLabel(category, interaction.guildId)}`,
-      `**Who can use it:** ${permissionText(json)}`,
+      `**Who can use it:** ${permissionText(command)}`,
       category.notes,
     ].filter(Boolean).join('\n\n'))
     .addFields(commandFields(command))
