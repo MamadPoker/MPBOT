@@ -1,6 +1,6 @@
 const { Events, AuditLogEvent } = require('discord.js');
 const { getSetting } = require('../db');
-const { logEmbed, sendLog, findAuditExecutor } = require('../logs');
+const { logEmbed, moderatorLine, lines, sendLog, findAuditExecutor } = require('../logs');
 
 // [voice state flag, text when turned on, text when turned off]
 const TOGGLES = [
@@ -48,21 +48,21 @@ module.exports = {
       await logLeave(); // sent right away; the moderator check below doesn't delay it or a quick rejoin
       if (!logOn(guild, 'disconnect_logger')) return; // don't read the audit log for nothing
       const modId = await findModerator(guild, AuditLogEvent.MemberDisconnect, null);
-      if (modId) await sendLog(guild, 'disconnect_logger', logEmbed('red', { user, text: `${who} **was disconnected** by <@${modId}> from ${from}.` }));
+      if (modId) await sendLog(guild, 'disconnect_logger', logEmbed('red', { user, text: lines(`${who} **was disconnected** from ${from}.`, moderatorLine(modId)) }));
       return;
     }
 
-    const lines = [];
+    const changes = [];
     if (before.channelId !== after.channelId) {
       // Moved by a moderator -> move_logger ("was moved"). By themselves -> voice_state_logger ("switched").
       const check = logOn(guild, 'move_logger') || logOn(guild, 'voice_state_logger');
       const modId = check ? await findModerator(guild, AuditLogEvent.MemberMove, after.channelId) : null;
-      if (modId) await sendLog(guild, 'move_logger', logEmbed('orange', { user, text: `${who} **was moved** by <@${modId}> from ${from} to ${to}.` }));
-      else lines.push(`${who} **switched voice channel** ${from} => ${to}.`);
+      if (modId) await sendLog(guild, 'move_logger', logEmbed('orange', { user, text: lines(`${who} **was moved** from ${from} to ${to}.`, moderatorLine(modId)) }));
+      else changes.push(`${who} **switched voice channel** ${from} => ${to}.`);
     }
     for (const [key, on, off] of TOGGLES) {
-      if (before[key] !== after[key]) lines.push(`${who} ${after[key] ? on : off} in ${to}.`);
+      if (before[key] !== after[key]) changes.push(`${who} ${after[key] ? on : off} in ${to}.`);
     }
-    if (lines.length) await sendLog(guild, 'voice_state_logger', logEmbed('orange', { user, text: lines.join('\n') }));
+    if (changes.length) await sendLog(guild, 'voice_state_logger', logEmbed('orange', { user, text: changes.join('\n') }));
   },
 };

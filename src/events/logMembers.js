@@ -1,5 +1,5 @@
 const { Events } = require('discord.js');
-const { field, logEmbed, timeBlock, sendLog } = require('../logs');
+const { logEmbed, label, lines, timeBlock, sendLog } = require('../logs');
 
 // Invite tracking: remember how many times each invite was used, then see which count went up when someone joins.
 // ponytail: if two people join at the exact same moment their invites can get mixed up; fine for normal servers.
@@ -49,25 +49,24 @@ module.exports = [
       const who = `<@${user.id}>`;
       // ProBot style: the sentence, then the account age; the avatar big on the right
       await sendLog(guild, 'join-server', logEmbed('green', {
-        user,
-        text: `${who} joined the server.\n${timeBlock('Age of account', user.createdTimestamp)}`,
-      }).setThumbnail(user.displayAvatarURL({ size: 256 })));
+        user, thumbnail: true,
+        text: lines(`📥 ${who} **joined the server.**`, timeBlock('Age of account', user.createdTimestamp)),
+      }));
 
-      let text;
+      let details;
       try {
         const invite = await findUsedInvite(guild);
         if (invite) {
-          const creator = invite.inviterId ? ` created by <@${invite.inviterId}>` : '';
-          text = `${who} joined using invite **discord.gg/${invite.code}**${creator} (used ${invite.uses} times).`;
+          details = [label('Invite', `\`discord.gg/${invite.code}\``), label('Created by', invite.inviterId && `<@${invite.inviterId}>`), label('Uses', String(invite.uses))];
         } else if (guild.vanityURLCode) {
-          text = `${who} joined, probably using the vanity link **discord.gg/${guild.vanityURLCode}**.`;
+          details = label('Invite', `Probably the vanity link \`discord.gg/${guild.vanityURLCode}\``);
         } else {
-          text = `${who} joined, but I couldn't tell which invite they used.`;
+          details = label('Invite', 'I couldn\'t tell which invite they used.');
         }
       } catch {
-        text = `${who} joined, but I need the **Manage Server** permission to see which invite they used.`;
+        details = label('Invite', 'Unknown: I need the **Manage Server** permission to see which invite they used.');
       }
-      await sendLog(guild, 'invite', logEmbed('blue', { user, text }));
+      await sendLog(guild, 'invite', logEmbed('blue', { user, text: lines(`📨 ${who} **joined the server.**`, details) }));
     },
   },
 
@@ -75,13 +74,12 @@ module.exports = [
     name: Events.GuildMemberRemove,
     async execute(member) {
       const roles = member.partial ? 'Unknown' : member.roles.cache.filter((r) => r.id !== member.guild.id).map(String).join(' ') || 'None';
-      // Same style: the sentence, then when they joined (= how long they were in the server)
+      // Same style: the sentence, then when they joined (= how long they were in the server), then their roles
       const joined = member.joinedTimestamp ? timeBlock('Joined', member.joinedTimestamp) : '⏲ **Joined:** Unknown';
       await sendLog(member.guild, 'left-server', logEmbed('red', {
-        user: member.user,
-        text: `<@${member.user.id}> left the server.\n${joined}`,
-        fields: [field('Roles', roles)],
-      }).setThumbnail(member.user.displayAvatarURL({ size: 256 })));
+        user: member.user, thumbnail: true,
+        text: lines(`📤 <@${member.user.id}> **left the server.**`, joined, label('Roles', roles)),
+      }));
     },
   },
 ];

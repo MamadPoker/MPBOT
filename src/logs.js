@@ -18,15 +18,28 @@ const simplifyName = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '_').re
 
 const COLORS = { green: 0x57f287, red: 0xed4245, orange: 0xf0b232, blue: 0x5865f2 };
 
-// Embed field for extra details (cut to Discord's 1024-character limit)
-const field = (name, value, inline = false) => ({ name, value: String(value || '—').slice(0, 1024), inline });
-
-// ProBot-style log: the member's avatar + username at the top, one short sentence, optional detail fields.
-// `user` is who the log is about (for moderation: the member it was done to).
-function logEmbed(color, { user, text, fields = [] }) {
-  const embed = new EmbedBuilder().setColor(COLORS[color]).setDescription(text).addFields(fields.filter(Boolean));
+// ProBot-style log. Author line: `user` (avatar + name: the member the log is about), or `server` (icon + name)
+// for channel/role logs. `thumbnail`: the member's avatar big on the right. `text` reads top to bottom.
+function logEmbed(color, { user, server, text, thumbnail = false }) {
+  const embed = new EmbedBuilder().setColor(COLORS[color]).setDescription(text.slice(0, 4096));
   if (user) embed.setAuthor({ name: user.username, iconURL: user.displayAvatarURL?.() });
+  else if (server) embed.setAuthor({ name: server.name, iconURL: server.iconURL?.() ?? undefined });
+  if (thumbnail && user?.displayAvatarURL) embed.setThumbnail(user.displayAvatarURL({ size: 256 }));
   return embed;
+}
+
+// "**Reason:**" with the value on the next line (ProBot style); nothing if there's no value
+const label = (name, value) => (value ? `**${name}:**\n${value}` : null);
+const moderatorLine = (id) => (id ? label('Responsible Moderator', `<@${id}>`) : null);
+// The description: lines from top to bottom, empty ones left out
+const lines = (...parts) => parts.flat().filter(Boolean).join('\n');
+
+// "10 minutes", "1 hour 30 minutes", "7 days" (for timeouts)
+function durationText(ms) {
+  const minutes = Math.max(1, Math.round(ms / 60_000));
+  const [d, h, m] = [Math.floor(minutes / 1440), Math.floor(minutes / 60) % 24, minutes % 60];
+  const part = (n, unit) => n && `${n} ${unit}${n === 1 ? '' : 's'}`;
+  return [part(d, 'day'), part(h, 'hour'), part(m, 'minute')].filter(Boolean).join(' ');
 }
 
 const timeText = (ms) => `<t:${Math.floor(ms / 1000)}:f> (<t:${Math.floor(ms / 1000)}:R>)`;
@@ -123,7 +136,20 @@ async function findAuditExecutor(guild, type, { channelId, targetId } = {}) {
 // ---- Turning audit log changes into readable text ----
 
 const permNames = (bits) => new PermissionsBitField(BigInt(bits ?? 0)).toArray();
-const prettyPerm = (p) => p.replace(/([a-z])([A-Z])/g, '$1 $2'); // "SendMessages" -> "Send Messages"
+
+// Discord's own names for permissions, where they differ from "SendMessages" -> "Send Messages"
+const PERMISSION_NAMES = {
+  CreateInstantInvite: 'Create Invite', ManageGuild: 'Manage Server', ViewGuildInsights: 'View Server Insights',
+  ModerateMembers: 'Timeout Members', SendTTSMessages: 'Send Text-to-Speech Messages', UseVAD: 'Use Voice Activity',
+  Stream: 'Video', UseExternalEmojis: 'Use External Emoji', ManageEmojisAndStickers: 'Manage Expressions',
+  ManageGuildExpressions: 'Manage Expressions', CreateGuildExpressions: 'Create Expressions', UseEmbeddedActivities: 'Use Activities',
+  SendPolls: 'Create Polls', MentionEveryone: 'Mention @everyone, @here and All Roles',
+};
+// In a channel's permissions, "Manage Roles" is called "Manage Permissions"
+const prettyPerm = (p, inChannel = false) =>
+  (inChannel && p === 'ManageRoles' ? 'Manage Permissions' : PERMISSION_NAMES[p] ?? p.replace(/([a-z])([A-Z])/g, '$1 $2'));
+// Readable names, each once (discord.js lists one permission under two names: Manage Emojis And Stickers / Expressions)
+const prettyPerms = (list, inChannel) => [...new Set(list.map((p) => prettyPerm(p, inChannel)))];
 
 // Only these changes are shown (the rest, like position, is noise)
 const LABELS = {
@@ -140,39 +166,52 @@ function showValue(key, value) {
   return `\`${String(value).slice(0, 200)}\``;
 }
 
-// mode: 'create' (show new values), 'delete' (show old values) or 'update' (old -> new). Returns '' if nothing worth showing.
+// One tidy line per change. mode: 'create' (new values), 'delete' (old values) or 'update' (old -> new).
+// The name is left out for create/delete (it's already in the title line). Returns '' if nothing worth showing.
 function describeChanges(changes, mode) {
-  const lines = [];
+  const out = [];
   for (const { key, old: before, new: after } of changes) {
-    const label = LABELS[key];
-    if (!label) continue;
+    const name = LABELS[key];
+    if (!name || (key === 'name' && mode !== 'update')) continue;
     if (key === 'permissions') {
       const was = permNames(before);
       const now = permNames(after);
-      const added = now.filter((p) => !was.includes(p)).map(prettyPerm);
-      const removed = was.filter((p) => !now.includes(p)).map(prettyPerm);
-      if (added.length) lines.push(`**${label} ➕** ${added.join(', ')}`);
-      if (removed.length) lines.push(`**${label} ➖** ${removed.join(', ')}`);
+      const added = prettyPerms(now.filter((p) => !was.includes(p)));
+      const removed = prettyPerms(was.filter((p) => !now.includes(p)));
+      if (mode === 'update') {
+        if (added.length) out.push(`**Permissions added:** ${added.join(', ')}`);
+        if (removed.length) out.push(`**Permissions removed:** ${removed.join(', ')}`);
+      } else {
+        const list = mode === 'create' ? added : removed;
+        out.push(`**Permissions:** ${list.join(', ') || '*none*'}`);
+      }
     } else if (mode === 'update') {
-      lines.push(`**${label}:** ${showValue(key, before)} → ${showValue(key, after)}`);
+      out.push(`**${name}:** ${showValue(key, before)} → ${showValue(key, after)}`);
     } else {
-      lines.push(`**${label}:** ${showValue(key, mode === 'create' ? after : before)}`);
+      out.push(`**${name}:** ${showValue(key, mode === 'create' ? after : before)}`);
     }
   }
-  return lines.join('\n');
+  return out.join('\n');
 }
 
-// Channel permission overwrites: shows each changed permission as ✅ allowed / ❌ denied / ⬜ default
+// Channel permission overwrites, grouped in plain words: now allowed / now denied / reset to default.
+// The previous state is added where it isn't obvious ("(was denied)").
 function describeOverwrite(changes) {
   const get = (key, side) => permNames(changes.find((c) => c.key === key)?.[side]);
-  const state = (side) => (p) => (get('allow', side).includes(p) ? '✅' : get('deny', side).includes(p) ? '❌' : '⬜');
+  const state = (side) => (p) => (get('allow', side).includes(p) ? 'allowed' : get('deny', side).includes(p) ? 'denied' : 'default');
   const before = state('old');
   const after = state('new');
-  const touched = new Set(['allow', 'deny'].flatMap((key) => [...get(key, 'old'), ...get(key, 'new')]));
-  return [...touched].filter((p) => before(p) !== after(p)).map((p) => `${prettyPerm(p)}: ${before(p)} → ${after(p)}`).join('\n');
+  const touched = [...new Set(['allow', 'deny'].flatMap((key) => [...get(key, 'old'), ...get(key, 'new')]))].filter((p) => before(p) !== after(p));
+  const group = (now, emoji, title) => {
+    const names = [...new Set(touched.filter((p) => after(p) === now)
+      .map((p) => `${prettyPerm(p, true)}${before(p) === 'default' ? '' : ` (was ${before(p)})`}`))];
+    return names.length ? `${emoji} **${title}:** ${names.join(', ')}` : null;
+  };
+  return lines(group('allowed', '✅', 'Now allowed'), group('denied', '❌', 'Now denied'), group('default', '⬜', 'Reset to default'));
 }
 
 module.exports = {
-  LOG_TYPES, simplifyName, field, logEmbed, timeText, istanbulDate, ago, timeBlock, sendLog, logChannelIds, isOwnLog,
+  LOG_TYPES, simplifyName, logEmbed, label, moderatorLine, lines, durationText,
+  timeText, istanbulDate, ago, timeBlock, sendLog, logChannelIds, isOwnLog,
   auditReason, readAuditReason, findAuditExecutor, describeChanges, describeOverwrite,
 };
