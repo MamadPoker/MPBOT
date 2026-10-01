@@ -1,6 +1,20 @@
 # MPBOT
 Discord bot for MamadPoker Kick channel
 
+## Updating the bot
+
+**Double-click `scripts\update.cmd`** (in the bot folder) and click **Yes** when Windows asks for administrator rights.
+It then:
+
+1. downloads the latest version (`git pull`),
+2. runs `npm install`, but only if `package.json` or `package-lock.json` changed,
+3. restarts the bot (`pm2 restart mpbot`); if PM2's settings in `ecosystem.config.js` changed, it reloads the bot
+   with the new settings and saves them (`pm2 delete` + `pm2 start ecosystem.config.js` + `pm2 save`),
+4. shows `pm2 list`, and waits for a key so you can read the result. `mpbot` should be **online**.
+
+It needs administrator rights because PM2 is started by the Windows task with admin rights. If something fails, the
+window stays open and says which step went wrong.
+
 ## Start the bot automatically when Windows starts
 
 This makes Windows start the bot about 30 seconds after the laptop boots, even before you log in,
