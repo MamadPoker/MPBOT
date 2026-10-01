@@ -54,6 +54,15 @@ module.exports = {
 
     const lines = [];
     if (before.channelId !== after.channelId) {
+      // The server's AFK channel: moving into it also counts as leaving, moving out of it as joining
+      // (on top of the normal logs below; also when Discord moves inactive members there)
+      const afk = guild.afkChannelId;
+      if (afk && after.channelId === afk) {
+        await sendLog(guild, 'leave_voice_logger', logEmbed('red', { user, text: `${who} **went AFK** — left ${from}.` }));
+      }
+      if (afk && before.channelId === afk) {
+        await sendLog(guild, 'join_voice_logger', logEmbed('green', { user, text: `${who} **came back from AFK** — joined ${to}.` }));
+      }
       // Moved by a moderator -> move_logger ("was moved"). By themselves -> voice_state_logger ("switched").
       const check = logOn(guild, 'move_logger') || logOn(guild, 'voice_state_logger');
       const modId = check ? await findModerator(guild, AuditLogEvent.MemberMove, after.channelId) : null;
