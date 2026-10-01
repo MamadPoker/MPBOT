@@ -16,8 +16,16 @@ if errorlevel 1 (
   exit /b
 )
 
+rem --- Windows reads a .cmd file while running it, so if "git pull" updates this very file the rest could run
+rem     garbled. Run a temporary copy instead, and tell it where the bot folder is.
+if /i not "%~1"=="/copy" (
+  copy /y "%~f0" "%TEMP%\mpbot-update.cmd" >nul
+  "%TEMP%\mpbot-update.cmd" /copy "%~dp0.."
+  exit /b
+)
+
 title MP Bot update
-cd /d "%~dp0.."
+cd /d "%~2"
 echo MP Bot update
 echo Bot folder: %CD%
 echo.
