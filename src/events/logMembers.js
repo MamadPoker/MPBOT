@@ -1,5 +1,5 @@
 const { Events } = require('discord.js');
-const { field, logEmbed, timeText, sendLog } = require('../logs');
+const { field, logEmbed, timeBlock, sendLog } = require('../logs');
 
 // Invite tracking: remember how many times each invite was used, then see which count went up when someone joins.
 // ponytail: if two people join at the exact same moment their invites can get mixed up; fine for normal servers.
@@ -47,11 +47,11 @@ module.exports = [
     async execute(member) {
       const { guild, user } = member;
       const who = `<@${user.id}>`;
+      // ProBot style: the sentence, then the account age; the avatar big on the right
       await sendLog(guild, 'join-server', logEmbed('green', {
         user,
-        text: `${who} joined the server.`,
-        fields: [field('Account created', timeText(user.createdTimestamp), true), field('Member count', guild.memberCount, true)],
-      }));
+        text: `${who} joined the server.\n${timeBlock('Age of account', user.createdTimestamp)}`,
+      }).setThumbnail(user.displayAvatarURL({ size: 256 })));
 
       let text;
       try {
@@ -75,15 +75,13 @@ module.exports = [
     name: Events.GuildMemberRemove,
     async execute(member) {
       const roles = member.partial ? 'Unknown' : member.roles.cache.filter((r) => r.id !== member.guild.id).map(String).join(' ') || 'None';
+      // Same style: the sentence, then when they joined (= how long they were in the server)
+      const joined = member.joinedTimestamp ? timeBlock('Joined', member.joinedTimestamp) : '⏲ **Joined:** Unknown';
       await sendLog(member.guild, 'left-server', logEmbed('red', {
         user: member.user,
-        text: `<@${member.user.id}> left the server.`,
-        fields: [
-          field('Joined', member.joinedTimestamp ? timeText(member.joinedTimestamp) : 'Unknown', true),
-          field('Member count', member.guild.memberCount, true),
-          field('Roles', roles),
-        ],
-      }));
+        text: `<@${member.user.id}> left the server.\n${joined}`,
+        fields: [field('Roles', roles)],
+      }).setThumbnail(member.user.displayAvatarURL({ size: 256 })));
     },
   },
 ];

@@ -31,6 +31,39 @@ function logEmbed(color, { user, text, fields = [] }) {
 
 const timeText = (ms) => `<t:${Math.floor(ms / 1000)}:f> (<t:${Math.floor(ms / 1000)}:R>)`;
 
+// "29/4/2021 8:04" in Istanbul time
+function istanbulDate(ms) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Istanbul', day: 'numeric', month: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(ms).map((p) => [p.type, p.value]));
+  return `${Number(parts.day)}/${Number(parts.month)}/${parts.year} ${Number(parts.hour)}:${parts.minute}`;
+}
+
+// "5 years ago", "3 months ago", "a day ago" (like ProBot). Plain text, worked out when the log is written,
+// so an old log keeps saying how long it was at that moment.
+function ago(ms) {
+  const sec = Math.max(0, (Date.now() - ms) / 1000);
+  const min = sec / 60;
+  const hours = min / 60;
+  const days = hours / 24;
+  const n = (value, unit, one) => (Math.round(value) <= 1 ? one : `${Math.round(value)} ${unit}s`);
+  const text = sec < 45 ? 'a few seconds'
+    : sec < 90 ? 'a minute'
+    : min < 45 ? n(min, 'minute', 'a minute')
+    : min < 90 ? 'an hour'
+    : hours < 22 ? n(hours, 'hour', 'an hour')
+    : hours < 36 ? 'a day'
+    : days < 26 ? n(days, 'day', 'a day')
+    : days < 45 ? 'a month'
+    : days < 320 ? n(days / 30.44, 'month', 'a month')
+    : days < 548 ? 'a year'
+    : n(days / 365.25, 'year', 'a year');
+  return `${text} ago`;
+}
+
+// "⏲ **Age of account:**" / `29/4/2021 8:04` / "**5 years ago**" (ProBot style)
+const timeBlock = (label, ms) => `⏲ **${label}:**\n\`${istanbulDate(ms)}\`\n**${ago(ms)}**`;
+
 async function sendLog(guild, type, embed) {
   const channelId = getSetting(guild.id, `log:${type}`);
   if (!channelId) return;
@@ -140,6 +173,6 @@ function describeOverwrite(changes) {
 }
 
 module.exports = {
-  LOG_TYPES, simplifyName, field, logEmbed, timeText, sendLog, logChannelIds, isOwnLog,
+  LOG_TYPES, simplifyName, field, logEmbed, timeText, istanbulDate, ago, timeBlock, sendLog, logChannelIds, isOwnLog,
   auditReason, readAuditReason, findAuditExecutor, describeChanges, describeOverwrite,
 };
