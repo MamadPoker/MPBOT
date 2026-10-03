@@ -34,7 +34,10 @@ function roleMention(guildId, roleId) {
   return roleId === guildId ? '@everyone' : `<@&${roleId}>`;
 }
 
-function buildLiveMessage(channel, mention) {
+// The Kick logo, uploaded as an application emoji in the Developer Portal
+const KICK_EMOJI = { id: '1555892342102298705', name: 'kickemoji' };
+
+function buildLiveMessage(channel, mention, { emoji = true } = {}) {
   const live = channel.livestream;
   const url = `https://kick.com/${channel.slug}`;
   const name = channel.user.username;
@@ -48,11 +51,24 @@ function buildLiveMessage(channel, mention) {
     .setImage(live.thumbnail?.url ? `${live.thumbnail.url}?t=${Date.now()}` : null)
     .setTimestamp();
   const button = new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Watch Stream').setURL(url);
+  if (emoji) button.setEmoji(KICK_EMOJI);
   return {
     content: `${mention} **${name}** is now live!`.trim(),
     embeds: [embed],
     components: [new ActionRowBuilder().addComponents(button)],
   };
+}
+
+// Discord refuses the whole message if it can't find the emoji (deleted, or a different bot app),
+// so then the alert is sent again without it
+async function sendLiveAlert(alertChannel, channel, mention) {
+  try {
+    await alertChannel.send(buildLiveMessage(channel, mention));
+  } catch (err) {
+    if (!/emoji/i.test(err.message)) throw err;
+    console.error('Kick emoji not usable, sending the alert without it:', err.message);
+    await alertChannel.send(buildLiveMessage(channel, mention, { emoji: false }));
+  }
 }
 
 // Checks every followed Kick channel, one request at a time. If Kick fails or says "slow down",
@@ -75,7 +91,7 @@ async function checkKickChannels(client) {
       db.prepare('UPDATE kick_channels SET last_live_id = ? WHERE guild_id = ? AND slug = ?').run(live.id, row.guild_id, slug);
       try {
         const alertChannel = await client.channels.fetch(alertChannelId);
-        await alertChannel.send(buildLiveMessage(channel, roleMention(row.guild_id, getSetting(row.guild_id, 'kick_role'))));
+        await sendLiveAlert(alertChannel, channel, roleMention(row.guild_id, getSetting(row.guild_id, 'kick_role')));
         console.log(`Live alert sent: ${slug} -> server ${row.guild_id}`);
       } catch (err) {
         console.error(`Could not send live alert for ${slug} in server ${row.guild_id}:`, err.message);
