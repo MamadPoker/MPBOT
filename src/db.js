@@ -22,6 +22,12 @@ db.exec(`
     author_id TEXT NOT NULL, author_name TEXT NOT NULL, content TEXT, attachments TEXT, created_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS messages_created_at ON messages (created_at);
+  -- Every member's join date and roles (JSON list of { id, name }), so the leave log still knows them
+  -- for members the bot hasn't seen since it started
+  CREATE TABLE IF NOT EXISTS member_snapshots (
+    guild_id TEXT NOT NULL, user_id TEXT NOT NULL, joined_at INTEGER, roles TEXT NOT NULL, updated_at INTEGER NOT NULL,
+    PRIMARY KEY (guild_id, user_id)
+  );
 `);
 
 // A short-lived version of the bot (Twitch/YouTube alerts, since removed) moved the followed channels
