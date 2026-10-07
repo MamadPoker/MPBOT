@@ -147,3 +147,13 @@ data.db*
 
 # Database backups (contain saved messages, keep them private)
 backups/
+
+# Other database files
+*.sqlite
+*.sqlite3
+*.db
+
+# Local tool folders (Claude Code, CodeGraph, graphify)
+.claude/
+.codegraph/
+graphify-out/
