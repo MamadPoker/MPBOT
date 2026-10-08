@@ -28,6 +28,11 @@ db.exec(`
     guild_id TEXT NOT NULL, user_id TEXT NOT NULL, joined_at INTEGER, roles TEXT NOT NULL, updated_at INTEGER NOT NULL,
     PRIMARY KEY (guild_id, user_id)
   );
+  -- Role menu (/rolemenu): which role each button gives. The channel and message ids are in settings.
+  CREATE TABLE IF NOT EXISTS rolemenu_roles (
+    guild_id TEXT NOT NULL, menu TEXT NOT NULL, name TEXT NOT NULL, role_id TEXT NOT NULL,
+    PRIMARY KEY (guild_id, menu, name)
+  );
 `);
 
 // A short-lived version of the bot (Twitch/YouTube alerts, since removed) moved the followed channels

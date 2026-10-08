@@ -34,6 +34,12 @@ const CATEGORIES = [
     notes: 'My role must be above the auto-role in Server Settings → Roles. Bots don\'t get it, and if your server has rules screening, members get it after accepting the rules.',
   },
   {
+    id: 'rolemenu', emoji: '🎨', name: 'Role menu', about: 'Members pick color, age and gender roles with buttons', commands: ['rolemenu'],
+    notes: '`/rolemenu setup` creates a **#get-roles** channel (only I can post there), the roles, and 3 menus: Colors, Age and Gender. '
+      + 'Each menu is single-choice, and clicking your role again removes it. Run it again any time: it only recreates what was deleted. '
+      + 'I need **Manage Roles** and **Manage Channels**, and my role must be above the role menu roles.',
+  },
+  {
     id: 'moderation', emoji: '🔨', name: 'Moderation', about: 'Ban, kick, time out and clear messages', commands: ['ban', 'kick', 'timeout', 'clear'],
     notes: 'You can\'t act on members whose top role is equal to or higher than yours. The member gets a DM with the reason, and every action is logged.',
   },
@@ -75,6 +81,7 @@ const EXAMPLES = {
   'goodbye disable': '/goodbye disable',
   'autorole set': '/autorole set role:@Member',
   'autorole off': '/autorole off',
+  'rolemenu setup': '/rolemenu setup category:Info',
   'ban': '/ban user:@spammer reason:Spam links delete-messages:Last 24 hours',
   'kick': '/kick user:@someone reason:Breaking the rules',
   'timeout': '/timeout user:@someone duration:10 minutes reason:Calm down',

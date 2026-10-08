@@ -12,6 +12,9 @@ Everything is set up with slash commands, and each server has its own settings.
   live, optionally pinging a role. Checks every 20 seconds and slows down by itself if Kick rate-limits it.
 - **Welcome and goodbye messages:** with a picture card (avatar, name, blurred or custom background).
 - **Auto-role:** gives every new member a role.
+- **Role menu:** `/rolemenu setup` creates a read-only **#get-roles** channel with three button menus (Colors, Age and
+  Gender) and the roles they give. Each menu is single-choice, and clicking your role again removes it. Running it
+  again only recreates what was deleted, and the buttons keep working after restarts.
 - **Moderation:** `/ban`, `/kick`, `/timeout` and `/clear`, with safety checks (role order, server owner, yourself).
 - **Logs (ProBot style):** 24 log types, one channel each: joins and leaves (with account age and the invite used),
   kicks, bans, timeouts, nickname and role changes, channel, role and permission changes, edited and deleted messages,
@@ -87,6 +90,7 @@ Commands for admins and moderators are only shown to members with the right perm
 | `/welcome set-channel` · `set-message` · `set-background` · `test` · `disable` | Welcome messages and card | Manage Server |
 | `/goodbye set-channel` · `set-message` · `test` · `disable` | Goodbye messages | Manage Server |
 | `/autorole set` · `off` | The role new members get | Manage Server |
+| `/rolemenu setup` | Creates (or repairs) **#get-roles** with the Colors, Age and Gender role buttons. Optional `category` for the new channel | Manage Server |
 | `/ban` · `/kick` · `/timeout` | Moderate a member, with a reason | Ban / Kick / Timeout Members |
 | `/clear` | Deletes up to 100 recent messages, optionally from one user | Manage Messages |
 | `/log set` · `setup` · `list` | Choose log channels, or create them all with `setup` | Manage Server |
