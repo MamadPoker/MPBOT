@@ -51,10 +51,27 @@ async function placeBelowMe(guild, roles) {
   for (const role of [...roles].reverse()) await role.setPosition(top().position - 1);
 }
 
+// Discord shows "didn't respond in time" if a click or command isn't answered within 3 seconds. So the very first
+// thing is "thinking..." (only visible to that user); the result follows with editReply. Every error is logged
+// with [rolemenu] and the user still gets a short answer.
+async function answerFirst(interaction, work) {
+  try {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  } catch (err) {
+    return console.error('[rolemenu] Could not answer Discord in time:', err.message);
+  }
+  try {
+    await work(interaction);
+  } catch (err) {
+    console.error(`[rolemenu] ${interaction.customId ? `Button ${interaction.customId}` : '/rolemenu setup'} failed:`, err);
+    await interaction.editReply(`❌ Something went wrong: ${err.message}`)
+      .catch((e) => console.error('[rolemenu] Could not show the error to the user:', e.message));
+  }
+}
+
 async function setup(interaction) {
   const { guild } = interaction;
   const me = guild.members.me;
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral }); // creating roles and messages takes a while
   const fail = (text) => interaction.editReply(`❌ ${text}`);
 
   // ---- 1. Check everything first, so nothing is left half done ----
@@ -140,12 +157,15 @@ async function setup(interaction) {
   ].join('\n'));
 }
 
-// A button click: "rolemenu:<menu>:<role name>". Works after restarts: the role ids come from the database.
-async function handleComponent(interaction) {
+// A button click: "rolemenu:<menu>:<role name>" (already answered with "thinking..." by answerFirst).
+// Works after restarts: the role ids come from the database.
+async function clickButton(interaction) {
   const [, menuId, name] = interaction.customId.split(':');
   const menu = MENUS.find((m) => m.id === menuId);
-  if (!menu || !interaction.inGuild()) return;
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  if (!menu || !interaction.inGuild()) {
+    console.error(`[rolemenu] Unknown button: ${interaction.customId}`);
+    return interaction.editReply('❌ This button is out of date. Ask an admin to run `/rolemenu setup` again.');
+  }
   const { guild, member } = interaction;
 
   const role = guild.roles.cache.get(savedRoleId(guild.id, menuId, name));
@@ -163,7 +183,7 @@ async function handleComponent(interaction) {
     if (others.length) await member.roles.remove(others, 'Role menu');
     return interaction.editReply(`✅ You now have ${role.name}`);
   } catch (err) {
-    console.error(`Role menu: could not change roles in ${guild.name}:`, err.message);
+    console.error(`[rolemenu] Could not change roles in ${guild.name}:`, err.message);
     return interaction.editReply('❌ I couldn\'t change your roles. Ask an admin to check that my role is above the role menu roles.');
   }
 }
@@ -182,6 +202,7 @@ module.exports = {
             .addChannelTypes(ChannelType.GuildCategory),
         ),
     ),
-  execute: setup, // setup is the only subcommand
-  handleComponent,
+  execute: (interaction) => answerFirst(interaction, setup), // setup is the only subcommand
+  // Buttons whose customId starts with "rolemenu:" are sent here by events/interactionCreate.js
+  handleComponent: (interaction) => answerFirst(interaction, clickButton),
 };
