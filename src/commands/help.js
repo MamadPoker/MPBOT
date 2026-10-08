@@ -15,7 +15,7 @@ const CATEGORIES = [
   { id: 'general', emoji: '🔧', name: 'General', about: 'Check the bot and get help', commands: ['ping', 'help', 'backup', 'servers'] },
   {
     id: 'kick', emoji: '🟢', name: 'Kick alerts', about: 'Post an alert when a Kick channel goes live', commands: ['live'],
-    notes: 'The bot checks Kick every minute and posts one alert per stream (title, category, thumbnail, link), with an optional role ping.',
+    notes: 'The bot checks Kick every 20 seconds and posts one alert per stream (title, category, thumbnail, link), with an optional role ping.',
   },
   {
     id: 'welcome', emoji: '👋', name: 'Welcome', about: 'Welcome & goodbye messages with a picture card', commands: ['welcome', 'goodbye'],
